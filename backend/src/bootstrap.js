@@ -44,6 +44,10 @@ export async function start(env = process.env) {
   const captcha = env.CAPTCHA_SECRET && env.CAPTCHA_VERIFY_URL
     ? createCaptchaVerifier({ verifyUrl: env.CAPTCHA_VERIFY_URL, secret: env.CAPTCHA_SECRET })
     : { verify: async () => true };
+  // Public captcha config served to clients via GET /config (PUBLIC site key only).
+  const captchaConfig = env.CAPTCHA_PROVIDER && env.CAPTCHA_SITE_KEY
+    ? { provider: env.CAPTCHA_PROVIDER, siteKey: env.CAPTCHA_SITE_KEY }
+    : null;
 
   // OIDC-bound signing (C3b) for authenticated user→content (e.g. mobile wallets).
   const oidc = env.OIDC_ISSUER && env.OIDC_AUDIENCE && env.OIDC_JWKS_URI
@@ -58,6 +62,7 @@ export async function start(env = process.env) {
     identity,
     oidc,
     captcha,
+    captchaConfig,
     limiter: createRateLimiter({ max: Number(env.RATE_LIMIT_MAX || 120), windowMs: 60_000 }),
     corsOrigin: env.CORS_ORIGINS ? env.CORS_ORIGINS.split(',') : false,
     allowedOrigins: env.ALLOWED_ORIGINS ? env.ALLOWED_ORIGINS.split(',') : null,

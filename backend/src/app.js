@@ -26,6 +26,7 @@ export function createApp({
   identity,
   oidc,
   captcha = { verify: async () => true },
+  captchaConfig = null,
   corsOrigin = false,
   allowedOrigins = null,
   limiter = { check: () => true },
@@ -89,6 +90,13 @@ export function createApp({
     route.get('/health', {
       schema: { tags: ['system'], summary: 'Liveness + signed-record count' },
     }, async () => ({ status: 'ok', service: 'TrueCapture Backend', time: clock.now().toISOString(), manifests: store.size() }));
+
+    // Public client config: the CAPTCHA provider + PUBLIC site key (never the
+    // secret) so the static sign clients can render the right widget. `null`
+    // when CAPTCHA is not configured — clients then sign without a token.
+    route.get('/config', {
+      schema: { tags: ['system'], summary: 'Public client config (CAPTCHA provider + site key)' },
+    }, async () => ({ captcha: captchaConfig }));
 
     // Public sign — no secret key; Origin allowlist + CAPTCHA + per-IP rate limit (C3).
     route.post('/sign', {

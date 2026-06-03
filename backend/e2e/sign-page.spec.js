@@ -32,7 +32,12 @@ test.beforeAll(async () => {
 
 test.afterAll(() => server && server.close());
 
+// GET /config with no CAPTCHA → clients sign without a token.
+const mockConfigNull = (page) => page.route(`${BACKEND}/config`, (route) =>
+  route.fulfill({ headers: { 'Access-Control-Allow-Origin': '*' }, json: { captcha: null } }));
+
 test('sign page sends coarse X-Device-Class and NO raw user-agent (M4)', async ({ page }) => {
+  await mockConfigNull(page);
   // The custom header triggers a CORS preflight — answer OPTIONS, then POST.
   await page.route(`${BACKEND}/sign`, (route) => {
     const r = route.request();
@@ -51,4 +56,29 @@ test('sign page sends coarse X-Device-Class and NO raw user-agent (M4)', async (
   expect(body).not.toMatch(/"device"\s*:/); // no device field in metadata
   expect(body.toLowerCase()).not.toContain('mozilla'); // no UA string leaked
   expect(body).not.toContain('navigator');
+});
+
+test('with CAPTCHA configured the sign page renders the widget and sends X-Captcha-Token (C3)', async ({ page }) => {
+  await page.route(`${BACKEND}/config`, (route) =>
+    route.fulfill({ headers: { 'Access-Control-Allow-Origin': '*' }, json: { captcha: { provider: 'turnstile', siteKey: '1x00000000000000000000AA' } } }));
+  // Stub the Turnstile remote script: define turnstile.render to fire the token callback.
+  await page.route((u) => u.href.startsWith('https://challenges.cloudflare.com/'), (route) =>
+    route.fulfill({ status: 200, contentType: 'application/javascript', body: "window.turnstile={render:function(el,opts){opts.callback('tok-123');window.__captchaRendered=true;return 'wid';}};" }));
+  await page.route(`${BACKEND}/sign`, (route) => {
+    const r = route.request();
+    if (r.method() === 'OPTIONS') {
+      return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'X-Device-Class, X-Captcha-Token, Content-Type' } });
+    }
+    return route.fulfill({ status: 200, headers: { 'X-Verify-Hash': 'h', 'content-type': 'image/jpeg', 'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'X-Verify-Hash' }, body: 'SIGNED' });
+  });
+
+  const reqPromise = page.waitForRequest((r) => r.url() === `${BACKEND}/sign` && r.method() === 'POST');
+  await page.goto(`${origin}/sign/index.html`);
+  await page.waitForFunction(() => window.__captchaRendered === true); // widget rendered + token captured
+  await expect(page.locator('#captcha-container')).toHaveCSS('display', 'flex'); // widget area shown
+  await page.setInputFiles('#input-photo', { name: 'p.jpg', mimeType: 'image/jpeg', buffer: jpeg });
+
+  const req = await reqPromise;
+  expect(req.headers()['x-captcha-token']).toBe('tok-123');
+  expect(req.headers()['x-device-class']).toBe('Desktop');
 });
