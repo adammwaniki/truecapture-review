@@ -1,0 +1,1 @@
+verify/vendor/c2pa_bg.wasm !text !filter !merge !diff
