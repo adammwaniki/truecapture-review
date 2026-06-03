@@ -36,6 +36,8 @@ describe('resolveConfig', () => {
     expect(c.oidc.enabled).toBe(true);
     expect(c.allowedOrigins).toEqual(['https://a', 'https://b']);
     expect(c.corsOrigin).toEqual(['https://a']);
+    expect(resolveConfig({ VERIFY_BASE_URL: 'https://v/verify' }).verifyBaseUrl).toBe('https://v/verify');
+    expect(c.verifyBaseUrl).toBeNull(); // not set in this env
     expect(c.maxFileSize).toBe(1000);
     expect(c.rateLimitMax).toBe(5);
     expect(c.port).toBe(8080);

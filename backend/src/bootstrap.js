@@ -70,6 +70,7 @@ export async function start(env = process.env) {
     allowedOrigins: cfg.allowedOrigins,
     maxFileSize: cfg.maxFileSize,
     trustProxy: cfg.trustProxy,
+    verifyBaseUrl: cfg.verifyBaseUrl,
   });
 
   await app.listen({ port: cfg.port, host: cfg.host });

@@ -32,6 +32,7 @@ export function createApp({
   limiter = { check: () => true },
   maxFileSize = 50 * 1024 * 1024,
   trustProxy = false,
+  verifyBaseUrl = null,
 }) {
   const app = Fastify({ logger: false, trustProxy });
   app.register(cors, { origin: corsOrigin, methods: ['GET', 'POST', 'OPTIONS'] });
@@ -79,7 +80,14 @@ export function createApp({
   function sendSigned(reply, mimeType, signed, verifyHash) {
     reply.header('Content-Type', mimeType);
     reply.header('X-Verify-Hash', verifyHash);
-    reply.header('Access-Control-Expose-Headers', 'X-Verify-Hash');
+    const exposed = ['X-Verify-Hash'];
+    if (verifyBaseUrl) {
+      // M-7: tell clients the canonical share link so the extension/sign page
+      // don't have to hardcode the public domain.
+      reply.header('X-Verify-URL', `${verifyBaseUrl}/${verifyHash}`);
+      exposed.push('X-Verify-URL');
+    }
+    reply.header('Access-Control-Expose-Headers', exposed.join(', '));
     return reply.send(signed);
   }
 

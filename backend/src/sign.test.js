@@ -33,7 +33,7 @@ describe('POST /sign (public: rate-limit + Origin allowlist + CAPTCHA, no key)',
       allowedOrigins: [ORIGIN],
       captcha: { verify: async (t) => t === 'good' },
     });
-    open = createApp({ c2pa, store: createMemoryStore(), clock: systemClock(), dedi: { async lookup() { return null; } }, identity });
+    open = createApp({ c2pa, store: createMemoryStore(), clock: systemClock(), dedi: { async lookup() { return null; } }, identity, verifyBaseUrl: 'https://verify.example/verify' });
     guardedBase = await guarded.listen({ port: 0, host: '127.0.0.1' });
     openBase = await open.listen({ port: 0, host: '127.0.0.1' });
   });
@@ -77,6 +77,15 @@ describe('POST /sign (public: rate-limit + Origin allowlist + CAPTCHA, no key)',
   it('signs with no allowlist configured and the default CAPTCHA (dev)', async () => {
     const res = await fetch(`${openBase}/sign`, { method: 'POST', body: form() });
     expect(res.status).toBe(200);
+  });
+
+  it('emits X-Verify-URL from the configured base, and only X-Verify-Hash without one (M-7)', async () => {
+    const withUrl = await fetch(`${openBase}/sign`, { method: 'POST', body: form() });
+    const hash = withUrl.headers.get('x-verify-hash');
+    expect(withUrl.headers.get('x-verify-url')).toBe(`https://verify.example/verify/${hash}`);
+    // the `guarded` app has no verifyBaseUrl → header absent
+    const noUrl = await fetch(`${guardedBase}/sign`, { method: 'POST', headers: { origin: ORIGIN, 'x-captcha-token': 'good' }, body: form() });
+    expect(noUrl.headers.get('x-verify-url')).toBeNull();
   });
 
   it('embeds the coarse device class (M4), not the raw user agent', async () => {

@@ -161,10 +161,19 @@ verify.yourdomain.com  CNAME  your-verify-service.up.railway.app
 
 ## Step 8 — Point the apps at your backend
 
-**Extension:** open the extension popup and set the **Backend URL** field to your
-backend (`https://api.yourdomain.com`); it is saved per browser. To change the
-built-in default instead, edit `let backendUrl = ...` in `extension/capture.js`
-and `BACKEND_DEFAULT` in `extension/popup.js`. (`extension/background.js` holds no URL.)
+**Extension:** open the extension popup and set the **Backend URL** and **Verify
+site URL** fields to your domains (saved per browser). The verify-site URL is used
+to build the share link shown after signing. To change the built-in defaults
+instead, edit `backendUrl`/`webUrl` in `extension/capture.js` and `BACKEND_DEFAULT`/`WEB_DEFAULT`
+in `extension/popup.js`. (`extension/background.js` holds no URL.)
+
+> **If you enable CAPTCHA:** the extension embeds the hosted CAPTCHA widget from
+> your verify site in an iframe, so add your verify domain to
+> `extension/manifest.json` → `content_security_policy.extension_pages` →
+> `frame-src` (pinned to `https://www.truecapture.global` by default).
+
+Set `VERIFY_BASE_URL` in `backend/.env` so the backend returns an `X-Verify-URL`
+header pointing at your verify site (the clients use it for the share link).
 
 **Verify site:** set the default backend in the two static clients:
 
