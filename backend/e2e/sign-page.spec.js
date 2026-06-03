@@ -82,3 +82,17 @@ test('with CAPTCHA configured the sign page renders the widget and sends X-Captc
   expect(req.headers()['x-captcha-token']).toBe('tok-123');
   expect(req.headers()['x-device-class']).toBe('Desktop');
 });
+
+test('hosted CAPTCHA widget renders the provider and postMessages the token (extension contract)', async ({ page }) => {
+  // The MV3 extension embeds /captcha/ in an iframe and reads the token via
+  // postMessage. Stub the Turnstile script; assert the widget posts the token.
+  await page.route((u) => u.href.startsWith('https://challenges.cloudflare.com/'), (route) =>
+    route.fulfill({ status: 200, contentType: 'application/javascript', body: "window.turnstile={render:function(el,opts){opts.callback('tok-xyz');return 'w';}};" }));
+  await page.addInitScript(() => {
+    window.__tokens = [];
+    window.addEventListener('message', (e) => { if (e.data && e.data.type === 'truecapture-captcha-token') window.__tokens.push(e.data.token); });
+  });
+  await page.goto(`${origin}/captcha/index.html?provider=turnstile&sitekey=1x00000000000000000000AA`);
+  await page.waitForFunction(() => window.__tokens && window.__tokens.length > 0);
+  expect(await page.evaluate(() => window.__tokens[0])).toBe('tok-xyz');
+});
