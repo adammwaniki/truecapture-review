@@ -34,4 +34,14 @@ describe('c2pa engine (contentauth, ES256)', () => {
   it('returns null when reading an asset with no C2PA manifest', async () => {
     expect(await c2pa.read(jpeg, 'image/jpeg')).toBeNull();
   });
+
+  it('returns null when the manifest is corrupt/unparseable', async () => {
+    const signed = await c2pa.sign(jpeg, 'image/jpeg', {
+      claim_generator_info: [{ name: 'TrueCapture' }],
+      assertions: [{ label: 'c2pa.actions.v2', data: { actions: [{ action: 'c2pa.created' }] } }],
+    });
+    const corrupt = Buffer.from(signed);
+    corrupt[Math.floor(corrupt.length * 0.7)] ^= 0xff; // damage the manifest region
+    expect(await c2pa.read(corrupt, 'image/jpeg')).toBeNull();
+  });
 });

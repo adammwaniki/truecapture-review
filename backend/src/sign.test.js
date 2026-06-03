@@ -18,7 +18,13 @@ describe('POST /sign (integration, real C2PA)', () => {
   beforeAll(async () => {
     const keys = ensureChain(join(mkdtempSync(join(tmpdir(), 'tc-sign-')), 'k'));
     store = createMemoryStore();
-    app = createApp({ c2pa: createC2pa(keys), store, clock: systemClock() });
+    app = createApp({
+      c2pa: createC2pa(keys),
+      store,
+      clock: systemClock(),
+      dedi: { async lookup() { return null; } },
+      dediRef: { record_id: 'rec-1', namespace: 'truecapture', registry: 'signing-keys' },
+    });
     base = await app.listen({ port: 0, host: '127.0.0.1' });
     jpeg = await sharp({ create: { width: 32, height: 32, channels: 3, background: { r: 1, g: 2, b: 3 } } })
       .jpeg().toBuffer();

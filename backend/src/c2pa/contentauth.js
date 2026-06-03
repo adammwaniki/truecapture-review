@@ -38,7 +38,12 @@ export function createContentAuthC2pa({ chainPem, leafKeyPem, caCertPem }) {
       try {
         const path = join(dir, 'asset');
         writeFileSync(path, asset);
-        const reader = await Reader.fromAsset({ path, mimeType }, settings);
+        let reader;
+        try {
+          reader = await Reader.fromAsset({ path, mimeType }, settings);
+        } catch {
+          return null; // unparseable / corrupt manifest → no readable C2PA
+        }
         if (!reader) return null; // no C2PA manifest present
         const store = reader.json();
         const manifest = store.manifests[store.active_manifest];
