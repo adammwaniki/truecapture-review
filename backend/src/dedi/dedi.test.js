@@ -6,8 +6,10 @@ const res = (ok, body) => ({ ok, json: async () => body });
 const ref = { namespace: 'truecapture', registry: 'signing-keys', recordId: 'rec-1' };
 
 describe('createDedi / createHttpDedi.lookup', () => {
-  it('createDedi returns a client with lookup()', () => {
-    expect(typeof createDedi().lookup).toBe('function');
+  it('createDedi returns a client with lookup() and publish()', () => {
+    const d = createDedi();
+    expect(typeof d.lookup).toBe('function');
+    expect(typeof d.publish).toBe('function');
   });
 
   it('returns the record with publicKey + entity when found', async () => {
@@ -36,5 +38,28 @@ describe('createDedi / createHttpDedi.lookup', () => {
   it('returns null when the record is absent (and when there is no data)', async () => {
     const dedi = createHttpDedi({ fetchImpl: async () => res(true, {}) });
     expect(await dedi.lookup(ref)).toBeNull();
+  });
+});
+
+describe('createHttpDedi.publish', () => {
+  it('POSTs the signing cert and returns true on success', async () => {
+    let captured;
+    const dedi = createHttpDedi({
+      apiKey: 'secret',
+      fetchImpl: async (url, opts) => { captured = { url, opts }; return res(true, {}); },
+    });
+    const ok = await dedi.publish({
+      namespace: 'truecapture', registry: 'signing-keys', recordName: 'rec-1',
+      publicKeyPem: 'CERTPEM', keyType: 'ES256', entity: { name: 'TrueCapture' },
+    });
+    expect(ok).toBe(true);
+    expect(captured.url).toContain('/dedi/truecapture/signing-keys/save-record-as-draft?publish=true');
+    expect(captured.opts.headers.Authorization).toBe('Bearer secret');
+    expect(JSON.parse(captured.opts.body).details.publicKey).toBe('CERTPEM');
+  });
+
+  it('returns false on a non-ok response', async () => {
+    const dedi = createHttpDedi({ apiKey: 'x', fetchImpl: async () => res(false, {}) });
+    expect(await dedi.publish({ namespace: 'n', registry: 'r', recordName: 'x', publicKeyPem: 'p', keyType: 'ES256', entity: {} })).toBe(false);
   });
 });

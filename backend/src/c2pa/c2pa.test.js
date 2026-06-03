@@ -35,6 +35,19 @@ describe('c2pa engine (contentauth, ES256)', () => {
     expect(await c2pa.read(jpeg, 'image/jpeg')).toBeNull();
   });
 
+  it('signs a manifest larger than the legacy 64KB APP11 limit (M2 regression)', async () => {
+    const big = 'x'.repeat(100 * 1024); // would overflow the old 16-bit APP11 length field
+    const signed = await c2pa.sign(jpeg, 'image/jpeg', {
+      claim_generator_info: [{ name: 'TrueCapture' }],
+      assertions: [
+        { label: 'c2pa.actions.v2', data: { actions: [{ action: 'c2pa.created' }] } },
+        { label: 'org.truecapture.note', data: { note: big } },
+      ],
+    });
+    const report = await c2pa.read(signed, 'image/jpeg');
+    expect(report.validationState).toBe('Valid');
+  });
+
   it('returns null when the manifest is corrupt/unparseable', async () => {
     const signed = await c2pa.sign(jpeg, 'image/jpeg', {
       claim_generator_info: [{ name: 'TrueCapture' }],
