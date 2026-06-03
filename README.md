@@ -2,7 +2,7 @@
 
 **Production-ready media signing for browser and mobile, built on the C2PA open standard.**
 
-TrueCapture lets anyone cryptographically sign photos and videos at the moment of capture. Each signed file carries an embedded C2PA manifest containing a SHA-256 hash of the content, an ECDSA-P256 signature, and a reference to the signer's public key on [DeDi.global](https://dedi.global), a decentralised key registry. If a single pixel changes after signing, the signature breaks. Anyone with the verify link gets an instant, server-side verdict with no app, no account, and no dependency on TrueCapture infrastructure required.
+TrueCapture lets anyone cryptographically sign photos and videos at the moment of capture. Each signed file carries an embedded C2PA manifest containing a SHA-256 hash of the content, an ECDSA-P256 signature, and a reference to the signer's public key on [DeDi.global](https://dedi.global), a decentralised key registry. If a single pixel changes after signing, the signature breaks. Anyone with the verify link gets an instant verdict — no app, no account. Because the signer's key is published on DeDi.global, the file is independently verifiable with any C2PA-aware tool, without trusting TrueCapture.
 
 ---
 
@@ -38,7 +38,7 @@ The SDK supports:
 - Optional edit chain — extends the C2PA manifest after authorised edits, compatible with Adobe Lightroom and Photoshop
 - iOS (Swift), Android (Kotlin), React Native
 
-Status: specification complete, implementation in progress. See [SDK_SPEC.md](./SDK_SPEC.md) for the full technical specification.
+Status: **specification only — a future implementation** (not yet shipped). Today the web app and Chrome extension sign server-side; on-device signing (Secure Enclave / Android Keystore) lands with the SDK. See [SDK_SPEC.md](./SDK_SPEC.md) for the full technical specification.
 
 Contact [tanushka@cdpi.dev](mailto:tanushka@cdpi.dev) to discuss integration.
 
@@ -58,18 +58,16 @@ Contact [tanushka@cdpi.dev](mailto:tanushka@cdpi.dev) to discuss integration.
 
 1. **Capture** — a journalist opens the TrueCapture Chrome extension (or mobile web app at `/sign`) and takes a photo, records video, or captures their screen.
 
-2. **Sign** — the browser uploads the file to the backend signing server. The server:
-   - Computes a SHA-256 hash of the raw file bytes
-   - Builds a C2PA manifest containing the hash, timestamp, source metadata, and signer identity
-   - Signs the manifest JSON with an ECDSA-P256 private key using `crypto.createSign('SHA256')`
-   - Embeds the manifest + signature into the file (JPEG APP11 segment, PNG `caBX` chunk, or binary trailer)
-   - Stores the verify hash in memory and returns the signed file + a short verify URL
+2. **Sign** — the browser sends the file to the backend signing server (the public endpoint has **no secret key**; it is guarded by a CAPTCHA, an Origin allowlist, and a per-IP rate limit — and a separate OIDC-bound endpoint exists for authenticated users). The server:
+   - Builds a standards-compliant **C2PA manifest** — a content hard-binding, a `c2pa.actions` assertion, a coarse capture device class (iOS/Android/Desktop; never the raw user-agent), and the signer's DeDi reference
+   - Signs it as **COSE_Sign1 / ES256** with the EC P-256 leaf key via [`@contentauth/c2pa-node`](https://opensource.contentauthenticity.org/) (with a `c2patool` fallback) — no hand-rolled signing or custom container
+   - Embeds the manifest into the file per the C2PA spec, stores the verify hash **durably** (SQLite), and returns the signed file + a short verify URL
 
 3. **Register** — the signer's public key is registered on [DeDi.global](https://dedi.global), a decentralised public key directory. The manifest embeds the DeDi record ID so any verifier can independently confirm the key belongs to the claimed organisation.
 
 4. **Share** — the journalist pastes the verify URL (`truecapture.global/verify/<hash>`) into their post caption or article. Readers tap it for an instant verdict.
 
-5. **Verify** — the verify page sends the file (or the hash) to `POST /verify` on the backend. The server re-extracts the manifest, re-verifies the signature, re-hashes the content, checks the DeDi key registry, and returns a JSON verdict: `authentic`, `tampered`, or `unsigned`.
+5. **Verify** — opening a file on the verify page reads it **in your browser** to check it is intact and signed (no upload). Confirming that the signer is the claimed organisation is an explicit step that re-checks the signer's key against the DeDi registry on the backend. A shared verify link (`/verify/<hash>`) is checked server-side. The verdict is **DeDi-anchored** — `authentic`, `forged`, `untrusted`, `tampered`, or `unsigned` — see [TRUST_MODEL.md](./TRUST_MODEL.md).
 
 ### C2PA compliance
 
@@ -110,12 +108,13 @@ TrueCapture implements the [C2PA specification](https://c2pa.org) — the same p
 
 ## Tech stack
 
-- **Backend** — Node.js 22, [Fastify](https://fastify.dev), `@fastify/multipart`, [node-forge](https://github.com/digitalbazaar/forge) for key generation
-- **Signing** — Node.js `crypto` module (ECDSA-P256, SHA-256, RSASSA-PKCS1-v1_5)
-- **C2PA embedding** — custom JPEG APP11 / PNG `caBX` / binary trailer implementation
-- **Key registry** — [DeDi.global](https://dedi.global) REST API
+- **Backend** — Node.js 20+, [Fastify](https://fastify.dev), `@fastify/multipart`, `@fastify/swagger` (OpenAPI + Swagger UI at `/docs`, spec at `/openapi.json`)
+- **Signing** — real **C2PA** (COSE_Sign1 / ES256) via [`@contentauth/c2pa-node`](https://opensource.contentauthenticity.org/) with a `c2patool` fallback — no hand-rolled signing or custom container
+- **Keys** — EC P-256 CA→leaf chain generated with `openssl` + `node:crypto`
+- **Trust** — DeDi-anchored verdict (signer key compared to the [DeDi.global](https://dedi.global) record); see [TRUST_MODEL.md](./TRUST_MODEL.md)
+- **Storage** — SQLite (`node:sqlite`) for verify-hash records (durable, with retention)
 - **Frontend** — plain HTML, CSS, JavaScript — no build step, no framework
-- **Verify crypto** — Web Crypto API (`crypto.subtle`) for client-side fallback; primary verification is server-side
+- **Verify crypto** — in-browser C2PA read via [`@contentauth/c2pa-web`](https://opensource.contentauthenticity.org/) (WASM) for content integrity with **no upload**; the forgery-proof key-binding is confirmed server-side
 - **Deployment** — [Railway](https://railway.app)
 
 ---
@@ -150,15 +149,16 @@ See [`.env.example`](.env.example) for all required variables.
 node server.js
 ```
 
-On first run the server auto-generates an ECDSA keypair and self-signed certificate in `backend/.keys/` and registers the public key on DeDi.global.
+On first run the server auto-generates an EC P-256 CA→leaf certificate chain in `backend/.keys/` and registers the public key on DeDi.global.
 
 ### 4. Serve the verify site
 
 ```bash
 cd ../verify
 npm install
+npm run vendor   # builds the in-browser C2PA reader (c2pa-web bundle + WASM)
 npm start
-# Runs at http://localhost:3000
+# Runs at http://localhost:8080
 ```
 
 ### 5. Load the Chrome extension

@@ -49,21 +49,32 @@ Replace "TrueCapture" with your organisation name in the following files:
 
 > ⚠️ **Never use the TrueCapture keys.** Generate your own. The keypair is what makes your signatures yours.
 
-The backend auto-generates a keypair on first start. You can also generate one manually:
+The backend auto-generates keys on first start — **recommended**. If
+`backend/.keys/chain.pem` is absent it creates an **EC P-256 CA→leaf chain** and
+writes `chain.pem`, `leaf.key`, and `ca.crt`. (A self-signed *leaf* is rejected
+by C2PA, so the leaf is chained to a local CA that becomes the trust anchor —
+see `TRUST_MODEL.md`.)
+
+To generate the chain manually instead (matching the backend's `ensureChain`):
 
 ```bash
-# Generate ECDSA P-256 private key
-openssl ecparam -name prime256v1 -genkey -noout -out private.pem
+# CA (EC P-256)
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out ca.key
+openssl req -x509 -key ca.key -out ca.crt -days 3650 \
+  -subj "/CN=YourOrg CA/O=YourOrg" \
+  -addext "basicConstraints=critical,CA:TRUE" \
+  -addext "keyUsage=critical,keyCertSign,cRLSign"
 
-# Extract public key
-openssl ec -in private.pem -pubout -out public.pem
-
-# Generate self-signed certificate (valid 10 years)
-openssl req -new -x509 -key private.pem -out cert.pem -days 3650 \
-  -subj "/CN=YourOrg Signer/O=YourOrg"
+# Leaf signing key + cert, chained to the CA (the EKU C2PA accepts)
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out leaf.key
+openssl req -new -key leaf.key -out leaf.csr -subj "/CN=YourOrg Signer/O=YourOrg"
+printf 'keyUsage=critical,digitalSignature\nextendedKeyUsage=emailProtection\n' > leaf.ext
+openssl x509 -req -in leaf.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+  -out leaf.crt -days 825 -extfile leaf.ext
+cat leaf.crt ca.crt > chain.pem
 ```
 
-Place `private.pem`, `public.pem`, and `cert.pem` in `backend/.keys/` before first run. If `.keys/` is absent the server generates an RSA-2048 keypair automatically.
+Place `chain.pem`, `leaf.key`, and `ca.crt` in `backend/.keys/` before first run.
 
 **Keep your private key secret.** It is listed in `.gitignore` and must never be committed.
 
