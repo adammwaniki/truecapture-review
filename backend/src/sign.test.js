@@ -78,4 +78,13 @@ describe('POST /sign (public: rate-limit + Origin allowlist + CAPTCHA, no key)',
     const res = await fetch(`${openBase}/sign`, { method: 'POST', body: form() });
     expect(res.status).toBe(200);
   });
+
+  it('embeds the coarse device class (M4), not the raw user agent', async () => {
+    const res = await fetch(`${openBase}/sign`, { method: 'POST', headers: { 'x-device-class': 'iOS' }, body: form() });
+    expect(res.status).toBe(200);
+    const report = await c2pa.read(Buffer.from(await res.arrayBuffer()), 'image/jpeg');
+    const m = report.manifestStore.manifests[report.manifestStore.active_manifest];
+    const capture = m.assertions.find((a) => a.label === 'org.truecapture.capture');
+    expect(capture.data).toEqual({ deviceClass: 'iOS' });
+  });
 });
