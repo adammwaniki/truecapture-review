@@ -2,15 +2,11 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import { createHash } from 'node:crypto';
-import { extractSignerSpki } from './c2pa/extract-cert.js';
-import { extractDediRef } from './verify/dedi-ref.js';
-import { publicKeysEqual } from './verify/keymatch.js';
-import { verdictFor } from './verify/verdict.js';
+import { verifyAsset } from './verify/pipeline.js';
 
-// App factory: wires injected seams (c2pa, store, clock, dedi, auth) to routes.
-// `corsOrigin` defaults to false (same-origin only) — replacing the legacy
-// `origin: true` (C3). The `cmd`-style bootstrap (env → real services → listen)
-// is the only coverage exclusion.
+// App factory: wires injected seams (c2pa, store, clock, dedi, auth, limiter) to
+// routes. Handlers depend only on injected services. The `cmd`-style bootstrap
+// (env → real services → listen) is the only coverage exclusion.
 export function createApp({
   c2pa,
   store,
@@ -37,9 +33,9 @@ export function createApp({
     manifests: store.size(),
   }));
 
-  // Sign into real C2PA (ES256/JUMBF). Requires an authenticated credential
-  // (C3); the credential's org identity + DeDi reference are embedded (H4),
-  // so each org signs as itself and the verifier can bind to the right key.
+  // Sign into real C2PA (ES256/JUMBF), authenticated (C3); the credential's org
+  // identity + DeDi reference are embedded (H4). The signed asset is stored so
+  // the share link can re-verify the exact bytes (C2).
   app.post('/sign', async (req, reply) => {
     const cred = auth.authenticate(req.headers);
     if (!cred) return reply.code(401).send({ error: 'Unauthorized' });
@@ -62,7 +58,7 @@ export function createApp({
 
     const signed = await c2pa.sign(asset, mimeType, manifestDefinition);
     const verifyHash = createHash('sha256').update(signed).digest('hex').slice(0, 24);
-    store.put(verifyHash, { signedAt: when, mimeType, filename: data.filename, org: cred.org.name });
+    store.put(verifyHash, { signedAt: when, mimeType, filename: data.filename, org: cred.org.name, assetB64: signed.toString('base64') });
 
     reply.header('Content-Type', mimeType);
     reply.header('X-Verify-Hash', verifyHash);
@@ -70,34 +66,21 @@ export function createApp({
     return reply.send(signed);
   });
 
-  // Forgery-proof verify (C1): validation_state=Valid proves crypto signature +
-  // content-hash integrity; identity is bound by requiring the asset's signer
-  // key to equal the DeDi-published key for the claimed (live) record. Public.
+  // Verify uploaded bytes (public). Real verdict from the shared pipeline (C1).
   app.post('/verify', async (req, reply) => {
     const data = await req.file();
     if (!data) return reply.code(400).send({ error: 'No file provided' });
-
     const asset = await data.toBuffer();
-    const mimeType = data.mimetype;
-    const report = await c2pa.read(asset, mimeType);
-    if (!report) return { verdict: 'unsigned' };
-    if (report.validationState !== 'Valid') return { verdict: 'tampered' };
+    return verifyAsset({ c2pa, dedi }, asset, data.mimetype);
+  });
 
-    const ref = extractDediRef(report.manifestStore);
-    const record = ref ? await dedi.lookup(ref) : null;
-    let keyMatches = false;
-    if (record && record.state === 'live') {
-      keyMatches = publicKeysEqual(extractSignerSpki(asset), record.publicKey);
-    }
-
-    const verdict = verdictFor({
-      hasManifest: true,
-      validationState: report.validationState,
-      hasRef: Boolean(ref),
-      record,
-      keyMatches,
-    });
-    return { verdict, entity: record?.entity ?? null };
+  // Share-link verify (C2): re-verify the STORED signed asset end-to-end and
+  // return the real verdict. No hardcoded authenticity, and bound to the bytes.
+  app.get('/verify/:hash', async (req, reply) => {
+    const rec = store.get(req.params.hash);
+    if (!rec) return reply.code(404).send({ verdict: 'unknown' });
+    const asset = Buffer.from(rec.assetB64, 'base64');
+    return verifyAsset({ c2pa, dedi }, asset, rec.mimeType);
   });
 
   return app;
