@@ -13,6 +13,9 @@ dist/
 build/
 .claude/
 
+# Vendored c2pa-web bundle + WASM (regenerate with `cd verify && npm run vendor`)
+verify/vendor/
+
 # Private key files — never commit these
 *.pem
 *.p12

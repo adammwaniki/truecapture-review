@@ -5,10 +5,15 @@
   "scripts": {
     "start": "npx serve . -l ${PORT:-8080}",
     "test": "vitest run",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "vendor": "esbuild node_modules/@contentauth/c2pa-web/dist/index.js --bundle --format=esm --outfile=vendor/c2pa-web.js && cp node_modules/@contentauth/c2pa-web/dist/resources/c2pa_bg.wasm vendor/c2pa_bg.wasm"
   },
   "devDependencies": {
-    "vitest": "^2.1.0",
-    "@vitest/coverage-v8": "^2.1.0"
+    "@vitest/coverage-v8": "^2.1.0",
+    "esbuild": "^0.24.0",
+    "vitest": "^2.1.0"
+  },
+  "dependencies": {
+    "@contentauth/c2pa-web": "^0.8.3"
   }
 }
