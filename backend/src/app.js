@@ -31,8 +31,9 @@ export function createApp({
   allowedOrigins = null,
   limiter = { check: () => true },
   maxFileSize = 50 * 1024 * 1024,
+  trustProxy = false,
 }) {
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, trustProxy });
   app.register(cors, { origin: corsOrigin, methods: ['GET', 'POST', 'OPTIONS'] });
   app.register(multipart, { limits: { fileSize: maxFileSize } });
   app.register(swagger, {

@@ -75,6 +75,9 @@ export function resolveConfig(env) {
     corsOrigin,
     maxFileSize: Number(env.MAX_FILE_SIZE || DEFAULT_MAX_FILE_SIZE),
     rateLimitMax: Number(env.RATE_LIMIT_MAX || 120),
+    // H-2: behind a proxy/CDN, trust X-Forwarded-For so the rate limiter keys on
+    // the real client IP rather than the proxy's single IP.
+    trustProxy: env.TRUST_PROXY === 'true' || env.TRUST_PROXY === '1',
     port: Number(env.PORT || 3000),
     host: env.HOST || '0.0.0.0',
   };

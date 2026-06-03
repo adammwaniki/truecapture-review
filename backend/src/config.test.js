@@ -55,6 +55,13 @@ describe('resolveConfig', () => {
     expect(resolveConfig({ DEDI_RECORD_ID: 'r' }).errors).toHaveLength(1); // only record id
   });
 
+  it('reads trustProxy from TRUST_PROXY (H-2)', () => {
+    expect(resolveConfig({}).trustProxy).toBe(false);
+    expect(resolveConfig({ TRUST_PROXY: 'true' }).trustProxy).toBe(true);
+    expect(resolveConfig({ TRUST_PROXY: '1' }).trustProxy).toBe(true);
+    expect(resolveConfig({ TRUST_PROXY: 'no' }).trustProxy).toBe(false);
+  });
+
   it('warns when the public signer is unprotected, not when a control is present (M-1)', () => {
     expect(resolveConfig({}).warnings).toHaveLength(1); // no captcha, no allowlist
     expect(resolveConfig({ ALLOWED_ORIGINS: 'https://a' }).warnings).toEqual([]); // allowlist present

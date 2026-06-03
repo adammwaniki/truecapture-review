@@ -65,6 +65,7 @@ export async function start(env = process.env) {
     corsOrigin: cfg.corsOrigin,
     allowedOrigins: cfg.allowedOrigins,
     maxFileSize: cfg.maxFileSize,
+    trustProxy: cfg.trustProxy,
   });
 
   await app.listen({ port: cfg.port, host: cfg.host });
