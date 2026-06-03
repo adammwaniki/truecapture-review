@@ -35,9 +35,10 @@ export async function start(env = process.env) {
   const dedi = createDedi({ apiKey: cfg.dedi.apiKey });
   // Publish the signing certificate on DeDi so verifiers can bind to it (C1/C5).
   if (cfg.shouldPublish) {
-    await dedi
+    const published = await dedi
       .publish({ namespace: cfg.dedi.namespace, registry: cfg.dedi.registry, recordName: cfg.dedi.recordId, publicKeyPem: leafPem, keyType: 'ES256', entity: { name: cfg.org, url: cfg.orgUrl } })
-      .catch((err) => console.error('DeDi registration failed:', err.message));
+      .catch(() => false);
+    if (!published) console.error('DeDi registration did not succeed (network error or rejected) — signed files may verify as "untrusted".');
   }
 
   // Public service identity (no per-user "who"; trust is content + DeDi — C3).
