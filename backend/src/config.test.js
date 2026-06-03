@@ -55,6 +55,11 @@ describe('resolveConfig', () => {
     expect(resolveConfig({ DEDI_RECORD_ID: 'r' }).errors).toHaveLength(1); // only record id
   });
 
+  it('reads retentionMs from RETENTION_MS (H-3)', () => {
+    expect(resolveConfig({}).retentionMs).toBeNull();
+    expect(resolveConfig({ RETENTION_MS: '86400000' }).retentionMs).toBe(86400000);
+  });
+
   it('reads trustProxy from TRUST_PROXY (H-2)', () => {
     expect(resolveConfig({}).trustProxy).toBe(false);
     expect(resolveConfig({ TRUST_PROXY: 'true' }).trustProxy).toBe(true);
