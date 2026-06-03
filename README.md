@@ -105,7 +105,6 @@ TrueCapture implements the [C2PA specification](https://c2pa.org) — the same p
 | `backend/` | Node.js + Fastify signing and verification server |
 | `extension/` | Chrome extension — Photo, Video, Screen capture |
 | `verify/` | Static site: landing page, `/verify`, `/sign` |
-| `webapp/` | Progressive web app assets |
 
 ---
 
