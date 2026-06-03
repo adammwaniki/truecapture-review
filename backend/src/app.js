@@ -4,16 +4,19 @@ import multipart from '@fastify/multipart';
 import { createHash } from 'node:crypto';
 import { verifyAsset } from './verify/pipeline.js';
 
-// App factory: wires injected seams (c2pa, store, clock, dedi, auth, limiter) to
-// routes. Handlers depend only on injected services. The `cmd`-style bootstrap
-// (env → real services → listen) is the only coverage exclusion.
+// App factory: wires injected seams to routes. The public /sign has no secret
+// key — its abuse controls are the per-IP rate limit (H3) + an Origin allowlist
+// + CAPTCHA (C3); trust comes from the content binding + DeDi-anchored verify
+// (C1/C2). The `cmd`-style bootstrap is the only coverage exclusion.
 export function createApp({
   c2pa,
   store,
   clock,
   dedi,
-  auth,
+  identity,
+  captcha = { verify: async () => true },
   corsOrigin = false,
+  allowedOrigins = null,
   limiter = { check: () => true },
   maxFileSize = 50 * 1024 * 1024,
 }) {
@@ -26,6 +29,31 @@ export function createApp({
     if (!limiter.check(req.ip)) return reply.code(429).send({ error: 'Too Many Requests' });
   });
 
+  async function signAndStore(asset, mimeType, filename, extraAssertions = []) {
+    const when = clock.now().toISOString();
+    const manifestDefinition = {
+      claim_generator_info: [{ name: identity.org.name, version: '1.0.0' }],
+      format: mimeType,
+      title: filename,
+      assertions: [
+        { label: 'c2pa.actions.v2', data: { actions: [{ action: 'c2pa.created', when }] } },
+        { label: 'org.truecapture.dedi', data: { record_id: identity.dedi.record_id, namespace: identity.dedi.namespace, registry: identity.dedi.registry } },
+        ...extraAssertions,
+      ],
+    };
+    const signed = await c2pa.sign(asset, mimeType, manifestDefinition);
+    const verifyHash = createHash('sha256').update(signed).digest('hex').slice(0, 24);
+    store.put(verifyHash, { signedAt: when, mimeType, filename, org: identity.org.name, assetB64: signed.toString('base64') });
+    return { signed, verifyHash };
+  }
+
+  function sendSigned(reply, mimeType, signed, verifyHash) {
+    reply.header('Content-Type', mimeType);
+    reply.header('X-Verify-Hash', verifyHash);
+    reply.header('Access-Control-Expose-Headers', 'X-Verify-Hash');
+    return reply.send(signed);
+  }
+
   app.get('/health', async () => ({
     status: 'ok',
     service: 'TrueCapture Backend',
@@ -33,37 +61,19 @@ export function createApp({
     manifests: store.size(),
   }));
 
-  // Sign into real C2PA (ES256/JUMBF), authenticated (C3); the credential's org
-  // identity + DeDi reference are embedded (H4). The signed asset is stored so
-  // the share link can re-verify the exact bytes (C2).
+  // Public sign — no secret key; Origin allowlist + CAPTCHA + per-IP rate limit (C3).
   app.post('/sign', async (req, reply) => {
-    const cred = auth.authenticate(req.headers);
-    if (!cred) return reply.code(401).send({ error: 'Unauthorized' });
-
+    if (allowedOrigins && !allowedOrigins.includes(req.headers.origin)) {
+      return reply.code(403).send({ error: 'Origin not allowed' });
+    }
+    if (!(await captcha.verify(req.headers['x-captcha-token']))) {
+      return reply.code(403).send({ error: 'CAPTCHA verification failed' });
+    }
     const data = await req.file();
     if (!data) return reply.code(400).send({ error: 'No file provided' });
-
     const asset = await data.toBuffer();
-    const mimeType = data.mimetype;
-    const when = clock.now().toISOString();
-    const manifestDefinition = {
-      claim_generator_info: [{ name: cred.org.name, version: '1.0.0' }],
-      format: mimeType,
-      title: data.filename,
-      assertions: [
-        { label: 'c2pa.actions.v2', data: { actions: [{ action: 'c2pa.created', when }] } },
-        { label: 'org.truecapture.dedi', data: { record_id: cred.dedi.record_id, namespace: cred.dedi.namespace, registry: cred.dedi.registry } },
-      ],
-    };
-
-    const signed = await c2pa.sign(asset, mimeType, manifestDefinition);
-    const verifyHash = createHash('sha256').update(signed).digest('hex').slice(0, 24);
-    store.put(verifyHash, { signedAt: when, mimeType, filename: data.filename, org: cred.org.name, assetB64: signed.toString('base64') });
-
-    reply.header('Content-Type', mimeType);
-    reply.header('X-Verify-Hash', verifyHash);
-    reply.header('Access-Control-Expose-Headers', 'X-Verify-Hash');
-    return reply.send(signed);
+    const { signed, verifyHash } = await signAndStore(asset, data.mimetype, data.filename);
+    return sendSigned(reply, data.mimetype, signed, verifyHash);
   });
 
   // Verify uploaded bytes (public). Real verdict from the shared pipeline (C1).
@@ -74,8 +84,7 @@ export function createApp({
     return verifyAsset({ c2pa, dedi }, asset, data.mimetype);
   });
 
-  // Share-link verify (C2): re-verify the STORED signed asset end-to-end and
-  // return the real verdict. No hardcoded authenticity, and bound to the bytes.
+  // Share-link verify (C2): re-verify the STORED signed asset; real verdict.
   app.get('/verify/:hash', async (req, reply) => {
     const rec = store.get(req.params.hash);
     if (!rec) return reply.code(404).send({ verdict: 'unknown' });

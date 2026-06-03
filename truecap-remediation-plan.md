@@ -169,11 +169,18 @@ Extract the ~600-line inline `<script>` blocks (`webapp/index.html:626`, `verify
 
 *Goal: the service is safe to run publicly. Closes C3, H3, H1, H4. Largely independent of Phases 1–3 — can run in parallel after Phase 0.*
 
-### C3 — Authenticate `/sign` and tighten CORS
+### C3 — Protect the public `/sign` + tighten CORS
 - **Root cause:** `cors { origin: true }` (`backend/server.js:18`); `/sign` has no auth (`:401-448`); identity hardcoded "TrueCapture" (`:133,198`).
-- **Fix:** Require an API key / OAuth client credential on `/sign`; bind each credential to an org identity (ties into H4). Restrict CORS to known origins for state-changing routes (keep read verification open if desired). Document the auth model.
-- **Acceptance:** Unauthenticated `/sign` ⇒ 401; signed content carries the authenticated org’s identity; CORS rejects unknown origins on `/sign`. Tests cover both.
-- **Depends on:** H4 (identity). **Size:** M.
+- **Decision (refined):** the **public** signing service intentionally has **no strong "who"** — its value comes from the **content binding + DeDi-anchored verify** (C1/C2), not from gating who may request a signature. A static secret embedded in the public extension/PWA would leak and gate nothing. So public `/sign` is **not** key-gated; it is protected by **per-IP rate limiting (H3) + a server-side Origin allowlist + CAPTCHA**, and signs with the **org default identity** (H4). Strong user→content binding is a separate path — see **C3b**.
+- **Fix:** Replace `origin: true` with a configurable allowlist. On public `/sign`: enforce the Origin allowlist (403 otherwise), verify a CAPTCHA token (403 otherwise), rely on the per-IP limiter, and sign with the configured org identity.
+- **Acceptance:** disallowed Origin ⇒ 403; missing/invalid CAPTCHA ⇒ 403; floods ⇒ 429 (H3); signed content carries the org identity. Tests cover each.
+- **Depends on:** H3 (limiter), H4 (identity). **Size:** M.
+
+### C3b — OIDC-bound signing (authenticated user → content) *(new)*
+- **Why:** to scale TrueCapture to platforms like **mobile wallets**, a separate authenticated path binds an **OIDC-authenticated user session** to the signed content, in addition to the org's DeDi-anchored key. Strong user attribution where the public path intentionally has none.
+- **Fix:** a dedicated endpoint (or plugin/microservice) `POST /sign/session` that validates an OIDC token (JWT: verify signature against the provider JWKS; check `iss`/`aud`/`exp`), then signs with the org key (DeDi-anchored, same engine as public) **and** embeds an assertion binding the user (`sub`/`iss`/email) into the C2PA manifest. Verify surfaces the bound user alongside the org + content checks.
+- **Acceptance:** valid token ⇒ signed asset whose manifest carries the verified user identity; missing/invalid/expired token ⇒ 401; the org DeDi-anchored verdict (C1) still holds. Tests cover valid + each rejection.
+- **Depends on:** C1/C4; an `oidc` verifier seam (jose). **Size:** M–L.
 
 ### H3 — Bounded, streaming uploads + rate limiting
 - **Root cause:** 500 MB multipart limit (`backend/server.js:23`) with full in-memory `Buffer.concat` (`:411-413,465-467`); no rate limit.

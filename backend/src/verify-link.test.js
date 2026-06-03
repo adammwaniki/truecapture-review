@@ -6,11 +6,8 @@ import sharp from 'sharp';
 import { ensureChain } from './keys/chain.js';
 import { createC2pa } from './c2pa/index.js';
 import { createMemoryStore } from './store/memory.js';
-import { createApiKeyAuth } from './auth/apikey.js';
 import { systemClock } from './clock.js';
 import { createApp } from './app.js';
-
-const KEY = 'link-key';
 
 describe('Share-link verify (C2, content-bound)', () => {
   let app;
@@ -28,13 +25,10 @@ describe('Share-link verify (C2, content-bound)', () => {
           : null;
       },
     };
-    const auth = createApiKeyAuth({
-      [KEY]: { org: { name: 'TrueCapture', url: 'https://x' }, dedi: { record_id: 'org-rec', namespace: 'truecapture', registry: 'signing-keys' } },
-    });
-    app = createApp({ c2pa: createC2pa(keys), store: createMemoryStore(), clock: systemClock(), dedi, auth });
+    const identity = { org: { name: 'TrueCapture', url: 'https://x' }, dedi: { record_id: 'org-rec', namespace: 'truecapture', registry: 'signing-keys' } };
+    app = createApp({ c2pa: createC2pa(keys), store: createMemoryStore(), clock: systemClock(), dedi, identity });
     base = await app.listen({ port: 0, host: '127.0.0.1' });
-    jpeg = await sharp({ create: { width: 24, height: 24, channels: 3, background: { r: 5, g: 6, b: 7 } } })
-      .jpeg().toBuffer();
+    jpeg = await sharp({ create: { width: 24, height: 24, channels: 3, background: { r: 5, g: 6, b: 7 } } }).jpeg().toBuffer();
   });
 
   afterAll(async () => {
@@ -44,7 +38,7 @@ describe('Share-link verify (C2, content-bound)', () => {
   it('re-verifies the stored asset and returns the real verdict (not hardcoded)', async () => {
     const fd = new FormData();
     fd.append('file', new Blob([jpeg], { type: 'image/jpeg' }), 'p.jpg');
-    const signRes = await fetch(`${base}/sign`, { method: 'POST', headers: { authorization: `Bearer ${KEY}` }, body: fd });
+    const signRes = await fetch(`${base}/sign`, { method: 'POST', body: fd });
     const hash = signRes.headers.get('x-verify-hash');
 
     const linkRes = await fetch(`${base}/verify/${hash}`);

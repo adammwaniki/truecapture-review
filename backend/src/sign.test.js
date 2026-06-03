@@ -6,77 +6,76 @@ import sharp from 'sharp';
 import { ensureChain } from './keys/chain.js';
 import { createC2pa } from './c2pa/index.js';
 import { createMemoryStore } from './store/memory.js';
-import { createApiKeyAuth } from './auth/apikey.js';
 import { systemClock } from './clock.js';
 import { createApp } from './app.js';
 
 const ORIGIN = 'https://www.truecapture.global';
-const KEY = 'test-key';
 const identity = {
   org: { name: 'TrueCapture', url: ORIGIN },
   dedi: { record_id: 'rec-1', namespace: 'truecapture', registry: 'signing-keys' },
 };
 
-describe('POST /sign (integration, real C2PA + auth)', () => {
-  let app;
-  let base;
-  let store;
+describe('POST /sign (public: rate-limit + Origin allowlist + CAPTCHA, no key)', () => {
+  let c2pa;
   let jpeg;
+  let guarded; // allowlist + token-checking CAPTCHA
+  let open; // no allowlist, default CAPTCHA (always true)
+  let guardedBase;
+  let openBase;
 
   beforeAll(async () => {
     const keys = ensureChain(join(mkdtempSync(join(tmpdir(), 'tc-sign-')), 'k'));
-    store = createMemoryStore();
-    app = createApp({
-      c2pa: createC2pa(keys),
-      store,
-      clock: systemClock(),
-      dedi: { async lookup() { return null; } },
-      auth: createApiKeyAuth({ [KEY]: identity }),
-      corsOrigin: [ORIGIN],
+    c2pa = createC2pa(keys);
+    jpeg = await sharp({ create: { width: 32, height: 32, channels: 3, background: { r: 1, g: 2, b: 3 } } }).jpeg().toBuffer();
+
+    guarded = createApp({
+      c2pa, store: createMemoryStore(), clock: systemClock(), dedi: { async lookup() { return null; } }, identity,
+      allowedOrigins: [ORIGIN],
+      captcha: { verify: async (t) => t === 'good' },
     });
-    base = await app.listen({ port: 0, host: '127.0.0.1' });
-    jpeg = await sharp({ create: { width: 32, height: 32, channels: 3, background: { r: 1, g: 2, b: 3 } } })
-      .jpeg().toBuffer();
+    open = createApp({ c2pa, store: createMemoryStore(), clock: systemClock(), dedi: { async lookup() { return null; } }, identity });
+    guardedBase = await guarded.listen({ port: 0, host: '127.0.0.1' });
+    openBase = await open.listen({ port: 0, host: '127.0.0.1' });
   });
 
   afterAll(async () => {
-    await app.close();
+    await guarded.close();
+    await open.close();
   });
 
-  it('signs an authenticated upload into real C2PA, records a hash, echoes CORS for the allowed origin', async () => {
+  const form = () => {
     const fd = new FormData();
     fd.append('file', new Blob([jpeg], { type: 'image/jpeg' }), 'photo.jpg');
-    const res = await fetch(`${base}/sign`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${KEY}`, origin: ORIGIN },
-      body: fd,
-    });
+    return fd;
+  };
 
+  it('signs with allowed origin + valid CAPTCHA', async () => {
+    const res = await fetch(`${guardedBase}/sign`, { method: 'POST', headers: { origin: ORIGIN, 'x-captcha-token': 'good' }, body: form() });
     expect(res.status).toBe(200);
-    expect(res.headers.get('access-control-allow-origin')).toBe(ORIGIN);
-    const hash = res.headers.get('x-verify-hash');
-    expect(hash).toMatch(/^[0-9a-f]{24}$/);
+    expect(res.headers.get('x-verify-hash')).toMatch(/^[0-9a-f]{24}$/);
     const out = Buffer.from(await res.arrayBuffer());
-    expect(out.length).toBeGreaterThan(jpeg.length);
     expect(out.includes(Buffer.from('c2pa'))).toBe(true);
-    expect(store.has(hash)).toBe(true);
   });
 
-  it('rejects an unauthenticated request with 401', async () => {
-    const fd = new FormData();
-    fd.append('file', new Blob([jpeg], { type: 'image/jpeg' }), 'photo.jpg');
-    const res = await fetch(`${base}/sign`, { method: 'POST', body: fd });
-    expect(res.status).toBe(401);
+  it('rejects a disallowed origin with 403', async () => {
+    const res = await fetch(`${guardedBase}/sign`, { method: 'POST', headers: { origin: 'https://evil.example', 'x-captcha-token': 'good' }, body: form() });
+    expect(res.status).toBe(403);
   });
 
-  it('returns 400 when authenticated but no file part is present', async () => {
+  it('rejects an invalid CAPTCHA with 403', async () => {
+    const res = await fetch(`${guardedBase}/sign`, { method: 'POST', headers: { origin: ORIGIN, 'x-captcha-token': 'bad' }, body: form() });
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 400 when no file is present', async () => {
     const fd = new FormData();
-    fd.append('note', 'no file here');
-    const res = await fetch(`${base}/sign`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${KEY}` },
-      body: fd,
-    });
+    fd.append('note', 'no file');
+    const res = await fetch(`${guardedBase}/sign`, { method: 'POST', headers: { origin: ORIGIN, 'x-captcha-token': 'good' }, body: fd });
     expect(res.status).toBe(400);
+  });
+
+  it('signs with no allowlist configured and the default CAPTCHA (dev)', async () => {
+    const res = await fetch(`${openBase}/sign`, { method: 'POST', body: form() });
+    expect(res.status).toBe(200);
   });
 });
