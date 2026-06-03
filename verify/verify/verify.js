@@ -28,6 +28,7 @@ const ICONS = {
 const DESCRIPTIONS = {
   authentic: 'The content is unchanged since signing, and the signing key is registered to the organisation below on DeDi.global.',
   tampered: 'This file carries a signature, but its content has changed since it was signed.',
+  invalid: 'This file carries a signature that could not be validated — it may be corrupted or was not produced as claimed.',
   forged: "This file's signature does not match the key registered to the claimed organisation on DeDi.global.",
   untrusted: "The signer's key is not currently live on DeDi.global (unregistered or revoked).",
   unsigned: 'This file does not contain a TrueCapture / C2PA signature.',

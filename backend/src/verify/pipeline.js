@@ -1,6 +1,6 @@
 import { extractDediRef } from './dedi-ref.js';
 import { publicKeysEqual } from './keymatch.js';
-import { verdictFor } from './verdict.js';
+import { verdictFor, isContentTampered } from './verdict.js';
 import { extractSignerSpki } from '../c2pa/extract-cert.js';
 
 // Shared verify pipeline used by both POST /verify (uploaded bytes) and
@@ -10,7 +10,10 @@ import { extractSignerSpki } from '../c2pa/extract-cert.js';
 export async function verifyAsset({ c2pa, dedi }, asset, mimeType) {
   const report = await c2pa.read(asset, mimeType);
   if (!report) return { verdict: 'unsigned', entity: null };
-  if (report.validationState !== 'Valid') return { verdict: 'tampered', entity: null };
+  if (report.validationState !== 'Valid') {
+    const verdict = verdictFor({ hasManifest: true, validationState: report.validationState, contentTampered: isContentTampered(report.validationStatus) });
+    return { verdict, entity: null };
+  }
 
   const ref = extractDediRef(report.manifestStore);
   const record = ref ? await dedi.lookup(ref) : null;
