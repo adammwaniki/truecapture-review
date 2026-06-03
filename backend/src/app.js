@@ -97,8 +97,9 @@ export function createApp({
     route.get('/openapi.json', { schema: { hide: true } }, async () => app.swagger());
 
     route.get('/health', {
-      schema: { tags: ['system'], summary: 'Liveness + signed-record count' },
-    }, async () => ({ status: 'ok', service: 'TrueCapture Backend', time: clock.now().toISOString(), manifests: store.size() }));
+      schema: { tags: ['system'], summary: 'Liveness' },
+      // L-4: do not expose the signed-record count on an unauthenticated endpoint.
+    }, async () => ({ status: 'ok', service: 'TrueCapture Backend', time: clock.now().toISOString() }));
 
     // Public client config: the CAPTCHA provider + PUBLIC site key (never the
     // secret) so the static sign clients can render the right widget. `null`
@@ -146,7 +147,8 @@ export function createApp({
       const data = await req.file();
       if (!data) return reply.code(400).send({ error: 'No file provided' });
       const asset = await data.toBuffer();
-      const userAssertion = { label: 'org.truecapture.signer', data: { iss: claims.iss, sub: claims.sub, email: claims.email ?? null } };
+      // L-4: only bind the email when the IdP marked it verified.
+      const userAssertion = { label: 'org.truecapture.signer', data: { iss: claims.iss, sub: claims.sub, email: claims.email_verified ? (claims.email ?? null) : null } };
       const { signed, verifyHash } = await signAndStore(asset, data.mimetype, data.filename, [userAssertion], deviceClassFrom(req.headers));
       return sendSigned(reply, data.mimetype, signed, verifyHash);
     });

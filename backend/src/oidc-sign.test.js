@@ -14,8 +14,9 @@ const identity = { org: { name: 'TrueCapture', url: 'https://x' }, dedi: { recor
 // Fake OIDC verifier (the real jose-based one is unit-tested in oidc/verify.test.js).
 const oidc = {
   async verify(token) {
-    if (token === 'valid') return { iss: 'https://idp', sub: 'user-1', email: 'u@x.com' };
-    if (token === 'valid-noemail') return { iss: 'https://idp', sub: 'user-2' };
+    if (token === 'valid') return { iss: 'https://idp', sub: 'user-1', email: 'u@x.com', email_verified: true };
+    if (token === 'valid-noemail') return { iss: 'https://idp', sub: 'user-2', email_verified: true }; // verified, but no email
+    if (token === 'valid-unverified') return { iss: 'https://idp', sub: 'user-3', email: 'u@x.com', email_verified: false };
     return null;
   },
 };
@@ -62,6 +63,13 @@ describe('POST /sign/session (OIDC-bound, C3b)', () => {
     expect(res.status).toBe(200);
     const signer = await signerAssertion(Buffer.from(await res.arrayBuffer()));
     expect(signer.data.email).toBeNull();
+  });
+
+  it('does not bind an UNVERIFIED email (L-4)', async () => {
+    const res = await sendFile('valid-unverified');
+    expect(res.status).toBe(200);
+    const signer = await signerAssertion(Buffer.from(await res.arrayBuffer()));
+    expect(signer.data).toEqual({ iss: 'https://idp', sub: 'user-3', email: null });
   });
 
   it('rejects a missing token with 401', async () => {
