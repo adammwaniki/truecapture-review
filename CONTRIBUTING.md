@@ -52,7 +52,7 @@ See [README.md](README.md) for the full local setup guide.
 
 1. Fork the repo and create a branch: `git checkout -b fix/description`
 2. Make your changes
-3. Test manually — there are no automated tests yet (contributions welcome)
+3. Run the tests — `cd backend && npm test` (unit + integration, 100% coverage gate) and `npm run test:e2e` (Playwright); `cd verify && npm test` for the frontend lib. CI runs these on every PR.
 4. Open a PR with a clear description of what you changed and why
 
 ---

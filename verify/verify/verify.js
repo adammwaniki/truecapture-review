@@ -193,6 +193,9 @@ function init() {
 
   // Share-link flow: truecapture.global/verify/<hash> or ?hash=<hash>. The file
   // was signed server-side, so the server verifies it directly (no user upload).
+  // Contract: the backend emits a 24-char lowercase-hex verify hash
+  // (sha256(signed).slice(0,24) — see backend src/app.js signAndStore). This
+  // accepts 16–32 lowercase hex; keep it in sync if that format ever changes.
   const HASH_RE = /^[0-9a-f]{16,32}$/;
   const pathTail = location.pathname.split('/').pop() || '';
   const queryHash = new URLSearchParams(location.search).get('hash') || '';
