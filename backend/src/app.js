@@ -11,10 +11,24 @@ import { verdictFor } from './verify/verdict.js';
 // `corsOrigin` defaults to false (same-origin only) — replacing the legacy
 // `origin: true` (C3). The `cmd`-style bootstrap (env → real services → listen)
 // is the only coverage exclusion.
-export function createApp({ c2pa, store, clock, dedi, auth, corsOrigin = false }) {
+export function createApp({
+  c2pa,
+  store,
+  clock,
+  dedi,
+  auth,
+  corsOrigin = false,
+  limiter = { check: () => true },
+  maxFileSize = 50 * 1024 * 1024,
+}) {
   const app = Fastify({ logger: false });
   app.register(cors, { origin: corsOrigin, methods: ['GET', 'POST', 'OPTIONS'] });
-  app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } }); // H3 will refine
+  app.register(multipart, { limits: { fileSize: maxFileSize } });
+
+  // Rate limit (anti-DoS, H3): reject floods by client IP before any work.
+  app.addHook('onRequest', async (req, reply) => {
+    if (!limiter.check(req.ip)) return reply.code(429).send({ error: 'Too Many Requests' });
+  });
 
   app.get('/health', async () => ({
     status: 'ok',
