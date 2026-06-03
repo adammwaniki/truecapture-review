@@ -26,7 +26,21 @@ export function resolveConfig(env) {
   const allowedOrigins = env.ALLOWED_ORIGINS ? env.ALLOWED_ORIGINS.split(',') : null;
   const corsOrigin = env.CORS_ORIGINS ? env.CORS_ORIGINS.split(',') : false;
 
+  // H-1: DeDi needs ALL of api key + namespace + record id, or none. With only
+  // some set, publish is skipped and signed files can never reach `authentic`
+  // (extractDediRef requires record_id) — fail fast instead of shipping a broken
+  // deployment that silently verifies everything as `untrusted`.
+  const errors = [];
+  const dediVarsSet = [apiKey, namespace, recordId].filter(Boolean).length;
+  if (dediVarsSet > 0 && dediVarsSet < 3) {
+    errors.push(
+      'DeDi is partially configured. Set DEDI_API_KEY, DEDI_NAMESPACE and DEDI_RECORD_ID together — ' +
+        'without all three, key registration is skipped and signed files can never verify as "authentic" (they fall back to "untrusted").',
+    );
+  }
+
   return {
+    errors,
     org,
     orgUrl,
     dedi: { namespace, registry, recordId, apiKey },

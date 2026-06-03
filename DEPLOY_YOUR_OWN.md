@@ -87,9 +87,10 @@ DeDi.global is a decentralised public key directory. Registering your key there 
 1. Create an account at [dedi.global](https://dedi.global)
 2. Create a **namespace** (e.g. `bbc` or `reuters`)
 3. Create a **registry** called `signing-keys` inside your namespace
-4. Note your **API key** from the DeDi dashboard
+4. Choose a **record id/name** for your key (e.g. `signing-key-2026`)
+5. Note your **API key** from the DeDi dashboard
 
-The backend registers your public key automatically on first start, using the `DEDI_API_KEY` and `DEDI_NAMESPACE` environment variables.
+The backend registers your public key automatically on first start, using the `DEDI_API_KEY`, `DEDI_NAMESPACE`, and `DEDI_RECORD_ID` environment variables. **All three are required** — verification can only return `authentic` for a key it can look up by record id, so the backend refuses to start if these are only partially configured.
 
 For manual registration or more detail, see the [DeDi API docs](https://dedi.global/docs).
 
@@ -106,10 +107,13 @@ cp .env.example backend/.env
 Edit `backend/.env`:
 
 ```env
-# DeDi key registry
+# DeDi key registry — set ALL of API key + namespace + record id together, or
+# verification can never reach "authentic" (signed files fall back to "untrusted").
+# The backend refuses to start if these are only partially set.
 DEDI_API_KEY=your_dedi_api_key_here
 DEDI_NAMESPACE=your_org_namespace        # e.g. "bbc" or "reuters"
 DEDI_REGISTRY=signing-keys
+DEDI_RECORD_ID=your_org_key_record       # the record your public key is published under
 
 # Your organisation
 ORG_NAME=Your Organisation Name

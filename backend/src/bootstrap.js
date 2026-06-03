@@ -19,6 +19,10 @@ import { createApp } from './app.js';
 // implementations and has no branch logic of its own.
 export async function start(env = process.env) {
   const cfg = resolveConfig(env);
+  if (cfg.errors.length) {
+    cfg.errors.forEach((e) => console.error('[config] FATAL:', e));
+    throw new Error(`Invalid configuration: ${cfg.errors.join(' | ')}`);
+  }
   const here = dirname(fileURLToPath(import.meta.url));
   const keysDir = join(here, '..', '.keys');
 

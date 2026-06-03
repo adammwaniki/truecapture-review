@@ -47,4 +47,11 @@ describe('resolveConfig', () => {
     expect(resolveConfig({ CAPTCHA_SECRET: 's' }).captcha.enforced).toBe(false); // no verifyUrl
     expect(resolveConfig({ CAPTCHA_PROVIDER: 'turnstile' }).captcha.config).toBeNull(); // no siteKey
   });
+
+  it('flags partial DeDi config as a fatal error, full or empty as fine (H-1)', () => {
+    expect(resolveConfig({}).errors).toEqual([]); // nothing set → dev mode, OK
+    expect(resolveConfig({ DEDI_API_KEY: 'k', DEDI_NAMESPACE: 'n', DEDI_RECORD_ID: 'r' }).errors).toEqual([]); // all set → OK
+    expect(resolveConfig({ DEDI_API_KEY: 'k', DEDI_NAMESPACE: 'n' }).errors).toHaveLength(1); // missing record id
+    expect(resolveConfig({ DEDI_RECORD_ID: 'r' }).errors).toHaveLength(1); // only record id
+  });
 });
