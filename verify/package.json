@@ -1,7 +1,14 @@
 {
   "name": "truecapture-verify",
   "version": "1.0.0",
+  "type": "module",
   "scripts": {
-    "start": "npx serve . -l ${PORT:-8080}"
+    "start": "npx serve . -l ${PORT:-8080}",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0",
+    "@vitest/coverage-v8": "^2.1.0"
   }
 }
