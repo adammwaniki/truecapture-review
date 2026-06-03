@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TrueCapture",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Digitally sign any photo or video at the moment you capture it. Tamper-proof, verifiable by anyone. Built on the C2PA open standard.",
   "permissions": [
     "downloads",
@@ -36,6 +36,6 @@
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'"
+    "extension_pages": "script-src 'self'; object-src 'self'; frame-src https://www.truecapture.global https://challenges.cloudflare.com https://*.hcaptcha.com"
   }
 }

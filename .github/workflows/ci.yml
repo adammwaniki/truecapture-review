@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    name: backend unit + integration (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 22]
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      # package-lock is regenerated whenever deps change; use install (not ci)
+      # until the lockfile is committed alongside the dependency swap (M5b).
+      - run: npm install --no-audit --no-fund
+      - run: npm run coverage   # fails below the 100% threshold
+
+  frontend:
+    name: frontend unit (verify/lib)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: verify
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run coverage   # 100% on verify/lib
+
+  e2e:
+    name: e2e (playwright)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      # Build the vendored c2pa-web bundle + WASM from node_modules so the H2
+      # in-browser tests run here (instead of skipping). Regenerated, so CI does
+      # not need to pull the Git LFS object.
+      - name: Build verify vendor (H2 in-browser reader)
+        working-directory: verify
+        run: npm install --no-audit --no-fund && npm run vendor
+      - run: npm run test:e2e

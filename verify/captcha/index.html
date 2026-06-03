@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verification</title>
+  <style>
+    html, body { margin: 0; background: transparent; }
+    body { display: flex; align-items: center; justify-content: center; min-height: 72px; font-family: system-ui, sans-serif; }
+  </style>
+</head>
+<body>
+  <!-- Hosted CAPTCHA widget. The Chrome extension embeds this page in an iframe
+       (MV3 forbids loading the Turnstile/hCaptcha remote script directly inside
+       an extension page). On success it postMessages the token to the parent. -->
+  <div id="widget"></div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const provider = params.get('provider');
+    const sitekey = params.get('sitekey') || '';
+
+    function sendToken(token) {
+      try { parent.postMessage({ type: 'truecapture-captcha-token', token: token }, '*'); } catch (e) {}
+    }
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src; s.async = true; s.defer = true;
+        s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+    (async () => {
+      if (!sitekey) return;
+      try {
+        if (provider === 'turnstile') {
+          await loadScript('https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit');
+          window.turnstile.render('#widget', { sitekey: sitekey, callback: sendToken });
+        } else if (provider === 'hcaptcha') {
+          await loadScript('https://js.hcaptcha.com/1/api.js?render=explicit');
+          window.hcaptcha.render('widget', { sitekey: sitekey, callback: sendToken });
+        }
+      } catch (e) { /* provider script unavailable — parent handles the missing token */ }
+    })();
+  </script>
+</body>
+</html>

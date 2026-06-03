@@ -1,9 +1,16 @@
 # TrueCapture SDK — Technical Specification
 
 **Version:** 0.1 (specification)
-**Status:** Implementation in progress — see [Section 10](#10-status)
+**Status:** 📋 **Specification only — a future implementation. Not yet built or shipped.**
 **License:** MIT
 **Contact:** [tanushka@cdpi.dev](mailto:tanushka@cdpi.dev)
+
+> **This is a forward-looking design document, not a description of shipped code.**
+> The on-device native SDK (Secure Enclave / Android Keystore, offline ES256
+> signing, edit chains) is a **planned future implementation**. Today, signing is
+> performed **server-side** by the backend for the web app and Chrome extension
+> (see the root [`README.md`](./README.md) and [`TRUST_MODEL.md`](./TRUST_MODEL.md));
+> the on-device key handling described below does not exist yet.
 
 This document is written for engineering teams at news organisations, broadcasters, and institutions evaluating native app integration of C2PA media signing.
 
@@ -442,8 +449,8 @@ Open source, MIT licensed. Self-host or use `truecapture.global/verify`.
 | Chrome extension | Live |
 | Verify backend | Live, open source |
 | SDK specification | Complete (this document) |
-| iOS SDK (Swift) | In progress — first release |
-| React Native bridge | In progress — first release |
-| Android SDK (Kotlin) | Planned |
+| iOS SDK (Swift) | Planned — future implementation (not started) |
+| React Native bridge | Planned — future implementation (not started) |
+| Android SDK (Kotlin) | Planned — future implementation (not started) |
 
 To discuss integration timelines, pilot deployments, or technical questions, contact [tanushka@cdpi.dev](mailto:tanushka@cdpi.dev).

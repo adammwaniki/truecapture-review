@@ -1,268 +1,206 @@
-// Verify page — uploads file to backend for server-side C2PA verification.
-// No client-side crypto or manifest parsing: works on all browsers including iOS Safari.
+// Verify page glue. The logic lives in the tested ../lib modules; this module
+// only wires them to the DOM.
+//
+// H2 — privacy-maximal public verify:
+//   • Default (file drop / picker): the file is read IN YOUR BROWSER via the
+//     vendored c2pa-web (./c2pa-read.js). Nothing is uploaded. We can prove the
+//     content is intact and signed, but NOT that the signer is genuine (the key
+//     is not exposed to the browser).
+//   • "Confirm signer with DeDi": an explicit action that uploads the file to
+//     the backend for the forgery-proof key-vs-DeDi check (C1) and the real
+//     verdict (authentic / forged / untrusted).
+//   • Share-link (/verify/<hash> or ?hash=): the file was signed server-side, so
+//     the server already holds it — that path verifies on the server directly.
+import { verifyByUpload, verifyByHash } from '../lib/verify-client.js';
+import { toDisplayModel, toBrowserModel } from '../lib/render-model.js';
+import { readInBrowser } from './c2pa-read.js';
 
-const BACKEND_URL = 'https://api.truecapture.global';
+const BACKEND_URL = window.TRUECAPTURE_BACKEND || 'https://api.truecapture.global';
+const doFetch = (url, opts) => fetch(url, opts);
 
-// Check URL for expected hash (truecapture.global/verify/<hash>)
-const urlHash = window.location.pathname.split('/').pop() ||
-                new URLSearchParams(window.location.search).get('hash');
+const ICONS = {
+  check: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>',
+  cross: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+  warn: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  info: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+};
 
-if (urlHash && /^[0-9a-f]{16}$/.test(urlHash)) {
-  autoVerifyFromHash(urlHash);
-}
+const DESCRIPTIONS = {
+  authentic: 'The content is unchanged since signing, and the signing key is registered to the organisation below on DeDi.global.',
+  tampered: 'This file carries a signature, but its content has changed since it was signed.',
+  forged: "This file's signature does not match the key registered to the claimed organisation on DeDi.global.",
+  untrusted: "The signer's key is not currently live on DeDi.global (unregistered or revoked).",
+  unsigned: 'This file does not contain a TrueCapture / C2PA signature.',
+  unknown: "We couldn't determine this file's status.",
+  signed: 'Read in your browser — your file was not uploaded. Confirm the signer to check it against the DeDi.global registry.',
+};
 
-// Drop zone drag-and-drop for desktop
-const dropZone = document.getElementById('drop-zone');
-const fileInput = document.getElementById('file-input');
+const $ = (id) => document.getElementById(id);
 
-dropZone.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  dropZone.classList.add('drag-over');
-});
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-dropZone.addEventListener('drop', (e) => {
-  e.preventDefault();
-  dropZone.classList.remove('drag-over');
-  const file = e.dataTransfer.files[0];
-  if (file) handleFile(file);
-});
+// The file awaiting an explicit server confirm (set by the in-browser read).
+let pendingFile = null;
 
-// NOTE: handleFile is defined in index.html <head> and calls uploadAndVerify below.
-
-document.getElementById('btn-verify-another').addEventListener('click', () => {
-  window._handling = false;
-  showSection('drop-section');
-  fileInput.value = '';
-});
-
-// ── Server-side verification ──────────────────────────────────────
-async function uploadAndVerify(file) {
-  updateStatus('Uploading to server...');
-  const formData = new FormData();
-  formData.append('file', file);
-
-  try {
-    updateStatus('Verifying...');
-    const res = await fetch(`${BACKEND_URL}/verify`, { method: 'POST', body: formData });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Server error ${res.status}`);
-    }
-
-    const data = await res.json();
-    showResult(data.verdict || 'unknown', data);
-
-  } catch (err) {
-    console.error('[TrueCapture] uploadAndVerify error:', err);
-    showResult('unknown', {
-      title: 'Verification Error',
-      description: 'Could not verify this file: ' + err.message,
-      manifest: null,
-    });
-  }
-}
-
-// ── Hash-based auto-verify (from verify link) ─────────────────────
-async function autoVerifyFromHash(hash) {
-  showSection('verifying-section');
-  updateStatus('Looking up signed file...');
-
-  try {
-    const res = await fetch(`${BACKEND_URL}/manifest/${hash}`);
-    if (!res.ok) {
-      showSection('drop-section');
-      document.getElementById('expected-hash-box').style.display = 'block';
-      document.getElementById('expected-hash-value').textContent = hash;
-      return;
-    }
-
-    const { manifest, signedAt } = await res.json();
-
-    // Manifest is in the store → was signed by this TrueCapture instance
-    let dediRecord = null;
-    if (manifest.dedi_record_id) {
-      updateStatus('Looking up key registry (DeDi)...');
-      try {
-        const dediRes = await fetch(`${BACKEND_URL}/dedi-lookup/${encodeURIComponent(manifest.dedi_record_id)}`);
-        if (dediRes.ok) dediRecord = await dediRes.json();
-      } catch {}
-    }
-
-    showResult('authentic', {
-      title: 'Authentic',
-      description: 'This file was signed by TrueCapture and its provenance is verified.',
-      manifest,
-      signedAt,
-      sigValid: true,
-      hashMatch: null,
-      verifyHash: hash,
-      dediRecord,
-    });
-
-  } catch (err) {
-    showResult('unknown', {
-      title: 'Verification Error',
-      description: 'An error occurred: ' + err.message,
-      manifest: null,
-    });
-  }
-}
-
-// ── UI helpers ────────────────────────────────────────────────────
 function showSection(id) {
-  ['drop-section', 'verifying-section', 'result-section'].forEach(s => {
-    const el = document.getElementById(s);
+  ['drop-section', 'verifying-section', 'result-section'].forEach((s) => {
+    const el = $(s);
     if (el) el.classList.toggle('hidden', s !== id);
   });
-  if (id === 'drop-section') {
-    document.getElementById('drop-section').style.display = '';
-  }
+  if (id === 'drop-section') $('drop-section').style.display = '';
 }
 
 function updateStatus(msg) {
-  document.getElementById('verify-status').textContent = msg;
+  const el = $('verify-status');
+  if (el) el.textContent = msg;
 }
 
-function showResult(verdict, data) {
+function paintBanner(verdict, icon, title) {
   showSection('result-section');
+  $('verdict-banner').className = 'verdict ' + verdict;
+  $('verdict-icon').innerHTML = ICONS[icon] || ICONS.info;
+  $('verdict-title').textContent = title;
+  $('verdict-desc').textContent = DESCRIPTIONS[verdict] || DESCRIPTIONS.unknown;
+}
 
-  const banner = document.getElementById('verdict-banner');
-  banner.className = 'verdict ' + verdict;
+function setConfirmVisible(visible) {
+  const btn = $('btn-confirm-signer');
+  if (btn) btn.style.display = visible ? '' : 'none';
+}
 
-  const icons = {
-    authentic: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`,
-    tampered:  `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
-    unsigned:  `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
-    unknown:   `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
-  };
+// Server verdict (forgery-proof): the authoritative result + DeDi entity.
+function render(result) {
+  const m = toDisplayModel(result);
+  paintBanner(m.verdict, m.icon, m.title);
+  pendingFile = null;
+  setConfirmVisible(false);
 
-  document.getElementById('verdict-icon').innerHTML = icons[verdict] || icons.unknown;
-  document.getElementById('verdict-title').textContent = data.title;
-  document.getElementById('verdict-desc').textContent = data.description;
-
-  if (data.manifest) {
-    document.getElementById('manifest-details').style.display = '';
-    document.getElementById('assertions-section').style.display = '';
-
-    const m = data.manifest;
-    const grid = document.getElementById('detail-grid');
-    grid.innerHTML = '';
-
-    const details = [
-      ['Signed By',       m.claim_generator || 'Unknown'],
-      ['Signed At',       data.signedAt ? new Date(data.signedAt).toLocaleString() : (m.created ? new Date(m.created).toLocaleString() : 'Unknown')],
-      ['Captured At',     m.captured_at ? new Date(m.captured_at).toLocaleString() : 'Unknown'],
-      ['Source',          m.source || 'Unknown'],
-      ['Device',          m.device || 'Unknown'],
-      ['Format',          m.format || 'Unknown'],
-      ['Title',           m.title || 'Untitled'],
-      ['Signature Valid', data.sigValid !== undefined ? (data.sigValid ? '✓ Yes' : '✗ No') : 'N/A'],
-    ];
-
-    details.forEach(([key, value]) => {
-      const item = document.createElement('div');
-      item.className = 'detail-item';
-      item.innerHTML = `<div class="key">${key}</div><div class="value">${escapeHtml(String(value))}</div>`;
-      grid.appendChild(item);
-    });
-
-    const list = document.getElementById('assertions-list');
-    list.innerHTML = '';
-
-    if (m.assertions && m.assertions.length > 0) {
-      // Build collapsed raw JSON block
-      const rawJson = m.assertions.map(a =>
-        `// ${a.label}\n${JSON.stringify(a.data, null, 2)}`
-      ).join('\n\n');
-
-      const pre = document.createElement('pre');
-      pre.className = 'assertion-data';
-      pre.style.display = 'none';
-      pre.textContent = rawJson;
-
-      const toggle = document.createElement('a');
-      toggle.href = '#';
-      toggle.className = 'assertions-toggle';
-      toggle.textContent = 'Show technical details →';
-      toggle.addEventListener('click', (e) => {
-        e.preventDefault();
-        const hidden = pre.style.display === 'none';
-        pre.style.display = hidden ? 'block' : 'none';
-        toggle.textContent = hidden ? 'Hide technical details ↑' : 'Show technical details →';
-      });
-
-      list.appendChild(toggle);
-      list.appendChild(pre);
-    }
+  const dedi = $('dedi-section');
+  if (m.entityName) {
+    const link = m.entityUrl
+      ? `<a class="dedi-url" href="${m.entityUrl}" target="_blank" rel="noopener">${escapeText(m.entityUrl)}</a>`
+      : '';
+    dedi.style.display = '';
+    dedi.innerHTML = `<h3>Signed by <span style="font-weight:500;color:var(--muted)">via DeDi.global</span></h3>` +
+      `<div class="dedi-card"><div class="dedi-name">${escapeText(m.entityName)}</div>${link}</div>`;
   } else {
-    document.getElementById('manifest-details').style.display = 'none';
-    document.getElementById('assertions-section').style.display = 'none';
-  }
-
-  // DeDi identity panel
-  const dediSection = document.getElementById('dedi-section');
-  if (data.dediRecord) {
-    const r = data.dediRecord;
-    dediSection.style.display = '';
-    const stateColor = r.state === 'live' ? 'var(--success)' : 'var(--warning)';
-    dediSection.innerHTML = `
-      <h3>Key Registry <span style="font-size:10px;font-weight:500;color:var(--muted);text-transform:none;letter-spacing:0">via DeDi.global</span></h3>
-      <div class="dedi-card">
-        <div class="dedi-row">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          <div>
-            <div class="dedi-name">${escapeHtml(r.entity?.name || 'Unknown')}</div>
-            ${r.entity?.url ? `<a class="dedi-url" href="${escapeHtml(r.entity.url)}" target="_blank" rel="noopener">${escapeHtml(r.entity.url)}</a>` : ''}
-          </div>
-        </div>
-        <div class="dedi-meta">
-          <span class="dedi-badge" style="border-color:${stateColor};color:${stateColor}">${escapeHtml(r.state)}</span>
-          <span>Registered ${r.created_at ? new Date(r.created_at).toLocaleDateString() : 'unknown'}</span>
-          <span>Key type: ${escapeHtml(r.keyType || 'RSA')}</span>
-        </div>
-        <div class="dedi-id">Record ID: ${escapeHtml(r.record_id)}</div>
-      </div>
-    `;
-  } else if (data.manifest?.dedi_record_id) {
-    dediSection.style.display = '';
-    dediSection.innerHTML = `
-      <h3>Key Registry</h3>
-      <div class="dedi-card" style="color:var(--muted)">
-        <div class="dedi-id">Record ID: ${escapeHtml(data.manifest.dedi_record_id)}</div>
-        <div style="font-size:12px;margin-top:6px">Could not fetch registry details — DeDi may be unavailable.</div>
-      </div>
-    `;
-  } else {
-    dediSection.style.display = 'none';
-  }
-
-  if (data.hashMatch !== null && data.hashMatch !== undefined && data.fileHash && data.manifest?.file_hash) {
-    document.getElementById('hash-section').style.display = '';
-    const compare = document.getElementById('hash-compare');
-    const match = data.hashMatch;
-    compare.innerHTML = `
-      <div class="hash-row">
-        <div class="hash-row-label">File hash</div>
-        <div class="hash-row-value ${match ? 'hash-match' : 'hash-mismatch'}">${escapeHtml(data.fileHash)}</div>
-      </div>
-      <div class="hash-row">
-        <div class="hash-row-label">Signed hash</div>
-        <div class="hash-row-value ${match ? 'hash-match' : 'hash-mismatch'}">${escapeHtml(data.manifest.file_hash)}</div>
-      </div>
-      <div class="hash-result ${match ? 'match' : 'mismatch'}">
-        ${match
-          ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Hashes match — file integrity confirmed`
-          : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Hash mismatch — file has been modified`}
-      </div>
-    `;
-  } else {
-    document.getElementById('hash-section').style.display = 'none';
+    dedi.style.display = 'none';
   }
 }
 
-function escapeHtml(str) {
+// In-browser read (no upload): content integrity + signed/not. Offers the
+// explicit DeDi confirm when there is something to confirm.
+function renderBrowser(read, file) {
+  const m = toBrowserModel(read);
+  paintBanner(m.verdict, m.icon, m.title);
+  $('dedi-section').style.display = 'none';
+  if (m.canConfirm) {
+    pendingFile = file;
+    setConfirmVisible(true);
+  } else {
+    pendingFile = null;
+    setConfirmVisible(false);
+  }
+}
+
+function escapeText(value) {
   const div = document.createElement('div');
-  div.appendChild(document.createTextNode(str));
+  div.textContent = String(value);
   return div.innerHTML;
 }
+
+async function readLocally(file) {
+  showSection('verifying-section');
+  updateStatus('Reading in your browser…');
+  try {
+    renderBrowser(await readInBrowser(file), file);
+  } catch {
+    // Could not load/run the in-browser reader. Do NOT silently upload — show an
+    // error state that lets the user opt into the server check explicitly.
+    renderBrowser({ error: true }, file);
+  }
+}
+
+// Explicit, user-initiated upload for the forgery-proof signer check.
+async function confirmSigner() {
+  if (!pendingFile) return;
+  const file = pendingFile;
+  showSection('verifying-section');
+  updateStatus('Confirming signer with DeDi…');
+  try {
+    render(await verifyByUpload(doFetch, BACKEND_URL, file));
+  } catch {
+    render({ verdict: 'unknown' });
+  }
+}
+
+// Exposed globally because the file <input> uses inline onchange/onclick.
+window.handleFile = function handleFile(file) {
+  if (!file || window._handling) return;
+  window._handling = true;
+  setTimeout(() => { window._handling = false; }, 3000);
+  const heic = /image\/(heic|heif)/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
+  if (heic) {
+    paintBanner('unknown', 'info', 'Unsupported Format');
+    $('verdict-desc').textContent = 'HEIC photos cannot be verified in the browser — export as JPEG and try again.';
+    setConfirmVisible(false);
+    return;
+  }
+  setTimeout(() => readLocally(file), 0);
+};
+
+window.startPolling = function startPolling(input) {
+  const deadline = Date.now() + 30000;
+  const id = setInterval(() => {
+    if (input.files && input.files.length > 0) {
+      clearInterval(id);
+      window.handleFile(input.files[0]);
+    } else if (Date.now() > deadline) {
+      clearInterval(id);
+    }
+  }, 100);
+};
+
+function init() {
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
+    document.documentElement.classList.add('is-mobile');
+  }
+
+  const dz = $('drop-zone');
+  if (dz) {
+    dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag-over'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+    dz.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dz.classList.remove('drag-over');
+      const f = e.dataTransfer.files[0];
+      if (f) window.handleFile(f);
+    });
+  }
+
+  const confirm = $('btn-confirm-signer');
+  if (confirm) confirm.addEventListener('click', confirmSigner);
+
+  const another = $('btn-verify-another');
+  if (another) {
+    another.addEventListener('click', () => {
+      window._handling = false;
+      pendingFile = null;
+      showSection('drop-section');
+      const fi = $('file-input');
+      if (fi) fi.value = '';
+    });
+  }
+
+  // Share-link flow: truecapture.global/verify/<hash> or ?hash=<hash>. The file
+  // was signed server-side, so the server verifies it directly (no user upload).
+  const HASH_RE = /^[0-9a-f]{16,32}$/;
+  const pathTail = location.pathname.split('/').pop() || '';
+  const queryHash = new URLSearchParams(location.search).get('hash') || '';
+  const urlHash = (HASH_RE.test(pathTail) ? pathTail : queryHash).trim();
+  if (HASH_RE.test(urlHash)) {
+    showSection('verifying-section');
+    updateStatus('Looking up signed file…');
+    verifyByHash(doFetch, BACKEND_URL, urlHash).then(render).catch(() => render({ verdict: 'unknown' }));
+  }
+}
+
+init();

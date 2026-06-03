@@ -275,6 +275,13 @@
       <button class="close-btn" id="btn-close">✕</button>
     </div>
 
+    <!-- CAPTCHA (C3): hosted widget iframe, shown only when the backend requires it.
+         MV3 forbids the Turnstile/hCaptcha remote script in an extension page, so
+         the widget runs in this iframe (verify site) and postMessages the token. -->
+    <div id="captcha-overlay" class="hidden" style="position:absolute; top:64px; left:0; right:0; display:flex; justify-content:center; z-index:5;">
+      <iframe id="captcha-frame" title="Verification" style="width:320px; height:80px; border:0; background:transparent; color-scheme:normal;"></iframe>
+    </div>
+
     <div class="cam-bar">
       <span class="cam-label" id="cam-label">Photo</span>
       <button class="shutter" id="btn-shutter">

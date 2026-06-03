@@ -2,6 +2,7 @@ const params = new URLSearchParams(location.search);
 const mode = params.get('mode') || 'photo'; // photo | webcam | screen
 
 let backendUrl = 'https://api.truecapture.global';
+let webUrl = 'https://www.truecapture.global';
 let currentStream = null;
 let mediaRecorder = null;
 let recordedChunks = [];
@@ -10,10 +11,48 @@ let recordingSeconds = 0;
 let isRecording = false;
 let verifyUrl = '';
 
-// Load backend URL from storage
-chrome.storage.local.get(['backendUrl'], (result) => {
+// Load backend + verify-site URLs from storage, then set up the CAPTCHA widget.
+chrome.storage.local.get(['backendUrl', 'webUrl'], (result) => {
   if (result.backendUrl) backendUrl = result.backendUrl;
+  if (result.webUrl) webUrl = result.webUrl;
+  loadCaptcha();
 });
+
+// ── CAPTCHA (C3) ──────────────────────────────────────────────────
+// MV3 forbids remote scripts in extension pages, so the Turnstile/hCaptcha widget
+// runs in a hosted iframe (the verify site) that postMessages the token back.
+let captchaToken = '';
+let captchaConfig = null;
+
+window.addEventListener('message', (e) => {
+  // Accept the token only from the hosted widget's origin.
+  if (captchaConfig && e.origin === new URL(webUrl).origin &&
+      e.data && e.data.type === 'truecapture-captcha-token') {
+    captchaToken = e.data.token || '';
+  }
+});
+
+async function loadCaptcha() {
+  try {
+    const res = await fetch(`${backendUrl}/config`);
+    const cfg = res.ok ? (await res.json()).captcha : null;
+    if (!cfg || !cfg.provider || !cfg.siteKey) return; // CAPTCHA disabled
+    captchaConfig = cfg;
+    const frame = document.getElementById('captcha-frame');
+    const overlay = document.getElementById('captcha-overlay');
+    if (frame) frame.src = `${webUrl}/captcha/?provider=${encodeURIComponent(cfg.provider)}&sitekey=${encodeURIComponent(cfg.siteKey)}`;
+    if (overlay) overlay.classList.remove('hidden');
+  } catch (e) { console.warn('CAPTCHA setup skipped:', e); }
+}
+
+// M4: derive a coarse device class (iOS / Android / Desktop) for the
+// X-Device-Class header — we never send the raw user-agent string.
+function deviceClass() {
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod/i.test(ua)) return 'iOS';
+  if (/Android/i.test(ua)) return 'Android';
+  return 'Desktop';
+}
 
 // ── Init ─────────────────────────────────────────────────────────
 async function init() {
@@ -117,22 +156,28 @@ function stopRecording() {
 
 // ── Sign & Download ───────────────────────────────────────────────
 async function signAndDownload(blob, filename, mimeType, source) {
+  if (captchaConfig && !captchaToken) {
+    showError('Please complete the verification challenge first.');
+    return;
+  }
   setStep('upload');
   document.getElementById('proc-msg').textContent = 'Uploading...';
 
   try {
     const form = new FormData();
     form.append('file', blob, filename);
+    // M4: coarse device class via header only — never the raw user-agent.
     form.append('metadata', JSON.stringify({
       source,
       capturedAt: new Date().toISOString(),
-      device: navigator.userAgent,
     }));
 
     setStep('sign');
     document.getElementById('proc-msg').textContent = 'Signing with C2PA...';
 
-    const response = await fetch(`${backendUrl}/sign`, { method: 'POST', body: form });
+    const headers = { 'X-Device-Class': deviceClass() };
+    if (captchaConfig) headers['X-Captcha-Token'] = captchaToken;
+    const response = await fetch(`${backendUrl}/sign`, { method: 'POST', headers, body: form });
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
