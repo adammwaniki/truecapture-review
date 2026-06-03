@@ -23,16 +23,24 @@ describe('verify-client', () => {
     expect(await verifyByHash(fetchImpl, 'http://api', 'nope')).toEqual({ verdict: 'unknown' });
   });
 
-  it('signFile sends the CAPTCHA token and returns the hash + blob', async () => {
+  it('signFile sends the CAPTCHA token + coarse device class and returns the hash + blob', async () => {
     let captured;
     const fetchImpl = async (url, opts) => { captured = { url, opts }; return ok(null, { 'x-verify-hash': 'h123' }); };
-    const out = await signFile(fetchImpl, 'http://api', new Blob(['x']), 'captcha-tok');
+    const out = await signFile(fetchImpl, 'http://api', new Blob(['x']), { captchaToken: 'captcha-tok', deviceClass: 'iOS' });
     expect(captured.opts.headers['x-captcha-token']).toBe('captcha-tok');
+    expect(captured.opts.headers['x-device-class']).toBe('iOS');
     expect(out).toEqual({ verifyHash: 'h123', blob: 'BLOB' });
+  });
+
+  it('signFile omits headers when not provided (no raw UA, no empty token)', async () => {
+    let captured;
+    const fetchImpl = async (url, opts) => { captured = { url, opts }; return ok(null, { 'x-verify-hash': 'h' }); };
+    await signFile(fetchImpl, 'http://api', new Blob(['x']));
+    expect(captured.opts.headers).toEqual({});
   });
 
   it('signFile throws on a non-ok response', async () => {
     const fetchImpl = async () => notOk(403);
-    await expect(signFile(fetchImpl, 'http://api', new Blob(['x']), 't')).rejects.toThrow('sign failed: 403');
+    await expect(signFile(fetchImpl, 'http://api', new Blob(['x']), { captchaToken: 't' })).rejects.toThrow('sign failed: 403');
   });
 });

@@ -630,6 +630,11 @@ const isIOS     = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStre
 const isAndroid = /Android/i.test(navigator.userAgent);
 const isMobile  = isIOS || isAndroid;
 
+// M4: send only a coarse device class (iOS / Android / Desktop) — never the raw
+// user-agent string. The backend validates this header and embeds it in the
+// org.truecapture.capture assertion.
+const deviceClass = () => (isIOS ? 'iOS' : isAndroid ? 'Android' : 'Desktop');
+
 // Show correct section on load
 if (!isMobile) {
   document.getElementById('capture-grid').classList.add('hidden');
@@ -761,12 +766,16 @@ async function processFile(file, metadata) {
   try {
     const form = new FormData();
     form.append('file', file, file.name);
-    form.append('metadata', JSON.stringify({ ...metadata, device: navigator.userAgent }));
+    form.append('metadata', JSON.stringify(metadata));
 
     setStep('sign');
     document.getElementById('proc-msg').textContent = 'Signing with C2PA...';
 
-    const res = await fetch(`${BACKEND_URL}/sign`, { method: 'POST', body: form });
+    const res = await fetch(`${BACKEND_URL}/sign`, {
+      method: 'POST',
+      headers: { 'X-Device-Class': deviceClass() },
+      body: form,
+    });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
       throw new Error(err.error || 'Signing failed');

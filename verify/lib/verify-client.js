@@ -14,11 +14,15 @@ export async function verifyByHash(fetchImpl, baseUrl, hash) {
   return res.json();
 }
 
-// Public sign: send the CAPTCHA token (no secret key). Returns the verify hash + signed blob.
-export async function signFile(fetchImpl, baseUrl, file, captchaToken) {
+// Public sign: send the CAPTCHA token (no secret key) and the COARSE device
+// class only (M4 — never the raw user-agent). Returns the verify hash + blob.
+export async function signFile(fetchImpl, baseUrl, file, { captchaToken, deviceClass } = {}) {
   const fd = new FormData();
   fd.append('file', file);
-  const res = await fetchImpl(`${baseUrl}/sign`, { method: 'POST', headers: { 'x-captcha-token': captchaToken }, body: fd });
+  const headers = {};
+  if (captchaToken) headers['x-captcha-token'] = captchaToken;
+  if (deviceClass) headers['x-device-class'] = deviceClass;
+  const res = await fetchImpl(`${baseUrl}/sign`, { method: 'POST', headers, body: fd });
   if (!res.ok) throw new Error(`sign failed: ${res.status}`);
   return { verifyHash: res.headers.get('x-verify-hash'), blob: await res.blob() };
 }

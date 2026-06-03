@@ -15,6 +15,15 @@ chrome.storage.local.get(['backendUrl'], (result) => {
   if (result.backendUrl) backendUrl = result.backendUrl;
 });
 
+// M4: derive a coarse device class (iOS / Android / Desktop) for the
+// X-Device-Class header — we never send the raw user-agent string.
+function deviceClass() {
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod/i.test(ua)) return 'iOS';
+  if (/Android/i.test(ua)) return 'Android';
+  return 'Desktop';
+}
+
 // ── Init ─────────────────────────────────────────────────────────
 async function init() {
   const label = document.getElementById('cam-label');
@@ -123,16 +132,20 @@ async function signAndDownload(blob, filename, mimeType, source) {
   try {
     const form = new FormData();
     form.append('file', blob, filename);
+    // M4: coarse device class via header only — never the raw user-agent.
     form.append('metadata', JSON.stringify({
       source,
       capturedAt: new Date().toISOString(),
-      device: navigator.userAgent,
     }));
 
     setStep('sign');
     document.getElementById('proc-msg').textContent = 'Signing with C2PA...';
 
-    const response = await fetch(`${backendUrl}/sign`, { method: 'POST', body: form });
+    const response = await fetch(`${backendUrl}/sign`, {
+      method: 'POST',
+      headers: { 'X-Device-Class': deviceClass() },
+      body: form,
+    });
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
