@@ -41,7 +41,6 @@ beforeAll(async () => {
     store: createMemoryStore(),
     clock: systemClock(),
     dedi,
-    dediRef: { record_id: 'org-rec', ...NS },
   });
   base = await app.listen({ port: 0, host: '127.0.0.1' });
   jpeg = await sharp({ create: { width: 24, height: 24, channels: 3, background: { r: 7, g: 8, b: 9 } } })

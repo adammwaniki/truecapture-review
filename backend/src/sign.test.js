@@ -6,10 +6,18 @@ import sharp from 'sharp';
 import { ensureChain } from './keys/chain.js';
 import { createC2pa } from './c2pa/index.js';
 import { createMemoryStore } from './store/memory.js';
+import { createApiKeyAuth } from './auth/apikey.js';
 import { systemClock } from './clock.js';
 import { createApp } from './app.js';
 
-describe('POST /sign (integration, real C2PA)', () => {
+const ORIGIN = 'https://www.truecapture.global';
+const KEY = 'test-key';
+const identity = {
+  org: { name: 'TrueCapture', url: ORIGIN },
+  dedi: { record_id: 'rec-1', namespace: 'truecapture', registry: 'signing-keys' },
+};
+
+describe('POST /sign (integration, real C2PA + auth)', () => {
   let app;
   let base;
   let store;
@@ -23,7 +31,8 @@ describe('POST /sign (integration, real C2PA)', () => {
       store,
       clock: systemClock(),
       dedi: { async lookup() { return null; } },
-      dediRef: { record_id: 'rec-1', namespace: 'truecapture', registry: 'signing-keys' },
+      auth: createApiKeyAuth({ [KEY]: identity }),
+      corsOrigin: [ORIGIN],
     });
     base = await app.listen({ port: 0, host: '127.0.0.1' });
     jpeg = await sharp({ create: { width: 32, height: 32, channels: 3, background: { r: 1, g: 2, b: 3 } } })
@@ -34,12 +43,17 @@ describe('POST /sign (integration, real C2PA)', () => {
     await app.close();
   });
 
-  it('signs an uploaded file into real C2PA and records a verify hash', async () => {
+  it('signs an authenticated upload into real C2PA, records a hash, echoes CORS for the allowed origin', async () => {
     const fd = new FormData();
     fd.append('file', new Blob([jpeg], { type: 'image/jpeg' }), 'photo.jpg');
-    const res = await fetch(`${base}/sign`, { method: 'POST', body: fd });
+    const res = await fetch(`${base}/sign`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${KEY}`, origin: ORIGIN },
+      body: fd,
+    });
 
     expect(res.status).toBe(200);
+    expect(res.headers.get('access-control-allow-origin')).toBe(ORIGIN);
     const hash = res.headers.get('x-verify-hash');
     expect(hash).toMatch(/^[0-9a-f]{24}$/);
     const out = Buffer.from(await res.arrayBuffer());
@@ -48,10 +62,21 @@ describe('POST /sign (integration, real C2PA)', () => {
     expect(store.has(hash)).toBe(true);
   });
 
-  it('returns 400 when no file part is present', async () => {
+  it('rejects an unauthenticated request with 401', async () => {
+    const fd = new FormData();
+    fd.append('file', new Blob([jpeg], { type: 'image/jpeg' }), 'photo.jpg');
+    const res = await fetch(`${base}/sign`, { method: 'POST', body: fd });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 400 when authenticated but no file part is present', async () => {
     const fd = new FormData();
     fd.append('note', 'no file here');
-    const res = await fetch(`${base}/sign`, { method: 'POST', body: fd });
+    const res = await fetch(`${base}/sign`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${KEY}` },
+      body: fd,
+    });
     expect(res.status).toBe(400);
   });
 });
