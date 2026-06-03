@@ -41,5 +41,17 @@ A real signed asset was produced and re-read as **`validation_state = Valid`, `a
 - `c2patool` **fallback** not yet exercised hands-on (validate during C4).
 - **Video/BMFF** signing not exercised (validate during C4; file-path mode expected).
 
+## Addendum — C1 trust-binding blocker (found while implementing C1)
+
+Implementing C1 (forgery-proof verify) surfaced a hard limitation in `@contentauth/c2pa-node` v0.5.5, all reproduced hands-on:
+- `validation_state = Valid` reflects only **cryptographic signature validity + content-hash match**, NOT signer trust. An asset signed by an **attacker's own key/CA still reads `Valid`** (verified: attacker-signed JPEG → `Valid`).
+- The SDK trust check (`verify.verifyTrust` + `trust.verifyTrustList` + `trustAnchors`, confirmed applied via `settingsToJson`) does **not** honor a custom CA anchor in this version: even the **legitimate** org cert reports `signingCredential.untrusted` against its own CA. So we cannot bind to the DeDi key via the SDK trust list. The trust outcome surfaces in `validation_results.activeManifest.failure[].code = signingCredential.untrusted`, but it's `untrusted` for legit and attacker alike.
+- The Reader exposes only `signature_info` = `{alg, issuer, common_name, cert_serial_number}` — **not** the signer's public key/cert. Serial+issuer+CN are forgeable, so they cannot form a secure binding.
+
+**Implication:** Phase 1 signing is sound, but **verification is not yet forgery-proof** with this binding — **C1 must not be marked done** until a real binding to the DeDi-published key lands, via one of:
+- **(B, recommended)** extract the COSE `x5chain` signing cert from the signed bytes and compare its public key to the DeDi-published cert (library-independent; bounded JUMBF/CBOR/COSE extraction);
+- **(A)** switch the engine to the `c2patool` subprocess (reference impl; may honor trust config / expose the chain) and re-test;
+- **(C)** get c2pa-rs trust config to make `signingCredential.trusted` work for our anchor (uncertain on v0.5.5).
+
 ## Sources
 [c2pa-node-v2](https://github.com/contentauth/c2pa-node-v2) · [c2pa-node usage.md (deprecation)](https://github.com/contentauth/c2pa-node/blob/main/docs/usage.md) · [c2pa-rs / c2patool](https://github.com/contentauth/c2pa-rs) · [dedi.global](https://dedi.global/) · [DeDi docs](https://dedi-global.gitbook.io/docs) · [DeDi API spec](https://github.com/finternet-io/dedi) · plus the bundled `@contentauth/c2pa-node/dist/types/*.d.ts`.
