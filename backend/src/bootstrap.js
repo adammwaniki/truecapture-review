@@ -10,48 +10,41 @@ import { createOidcVerifier } from './oidc/verify.js';
 import { createRemoteJWKSet } from 'jose';
 import { createRateLimiter } from './ratelimit.js';
 import { systemClock } from './clock.js';
+import { resolveConfig } from './config.js';
 import { createApp } from './app.js';
 
 // Composition root — intentionally the SINGLE coverage exclusion (see
-// vitest.config.js). It only wires the tested src/ seams to real
-// implementations from env; it contains no business logic of its own.
+// vitest.config.js). The env→config DECISIONS live in the tested ./config.js
+// (resolveConfig); this file only wires the resolved config to real
+// implementations and has no branch logic of its own.
 export async function start(env = process.env) {
+  const cfg = resolveConfig(env);
   const here = dirname(fileURLToPath(import.meta.url));
   const keysDir = join(here, '..', '.keys');
-  const org = env.ORG_NAME || 'TrueCapture';
-  const orgUrl = env.ORG_URL || 'https://www.truecapture.global';
 
   // EC P-256 CA→leaf chain (generated on first run; PKCS#8 leaf key).
-  const keys = ensureChain(keysDir, { org });
+  const keys = ensureChain(keysDir, { org: cfg.org });
   const leafPem = readFileSync(join(keysDir, 'leaf.crt'), 'utf8');
 
-  const namespace = env.DEDI_NAMESPACE;
-  const registry = env.DEDI_REGISTRY || 'signing-keys';
-  const recordId = env.DEDI_RECORD_ID;
-  const dedi = createDedi({ apiKey: env.DEDI_API_KEY });
-
+  const dedi = createDedi({ apiKey: cfg.dedi.apiKey });
   // Publish the signing certificate on DeDi so verifiers can bind to it (C1/C5).
-  if (env.DEDI_API_KEY && namespace && recordId) {
+  if (cfg.shouldPublish) {
     await dedi
-      .publish({ namespace, registry, recordName: recordId, publicKeyPem: leafPem, keyType: 'ES256', entity: { name: org, url: orgUrl } })
+      .publish({ namespace: cfg.dedi.namespace, registry: cfg.dedi.registry, recordName: cfg.dedi.recordId, publicKeyPem: leafPem, keyType: 'ES256', entity: { name: cfg.org, url: cfg.orgUrl } })
       .catch((err) => console.error('DeDi registration failed:', err.message));
   }
 
   // Public service identity (no per-user "who"; trust is content + DeDi — C3).
-  const identity = { org: { name: org, url: orgUrl }, dedi: { record_id: recordId, namespace, registry } };
+  const identity = { org: { name: cfg.org, url: cfg.orgUrl }, dedi: { record_id: cfg.dedi.recordId, namespace: cfg.dedi.namespace, registry: cfg.dedi.registry } };
 
   // CAPTCHA + Origin allowlist + rate limit guard the keyless public /sign.
-  const captcha = env.CAPTCHA_SECRET && env.CAPTCHA_VERIFY_URL
-    ? createCaptchaVerifier({ verifyUrl: env.CAPTCHA_VERIFY_URL, secret: env.CAPTCHA_SECRET })
+  const captcha = cfg.captcha.enforced
+    ? createCaptchaVerifier({ verifyUrl: cfg.captcha.verifyUrl, secret: cfg.captcha.secret })
     : { verify: async () => true };
-  // Public captcha config served to clients via GET /config (PUBLIC site key only).
-  const captchaConfig = env.CAPTCHA_PROVIDER && env.CAPTCHA_SITE_KEY
-    ? { provider: env.CAPTCHA_PROVIDER, siteKey: env.CAPTCHA_SITE_KEY }
-    : null;
 
   // OIDC-bound signing (C3b) for authenticated user→content (e.g. mobile wallets).
-  const oidc = env.OIDC_ISSUER && env.OIDC_AUDIENCE && env.OIDC_JWKS_URI
-    ? createOidcVerifier({ issuer: env.OIDC_ISSUER, audience: env.OIDC_AUDIENCE, jwks: createRemoteJWKSet(new URL(env.OIDC_JWKS_URI)) })
+  const oidc = cfg.oidc.enabled
+    ? createOidcVerifier({ issuer: cfg.oidc.issuer, audience: cfg.oidc.audience, jwks: createRemoteJWKSet(new URL(cfg.oidc.jwksUri)) })
     : { verify: async () => null }; // not configured → /sign/session returns 401
 
   const app = createApp({
@@ -62,15 +55,13 @@ export async function start(env = process.env) {
     identity,
     oidc,
     captcha,
-    captchaConfig,
-    limiter: createRateLimiter({ max: Number(env.RATE_LIMIT_MAX || 120), windowMs: 60_000 }),
-    corsOrigin: env.CORS_ORIGINS ? env.CORS_ORIGINS.split(',') : false,
-    allowedOrigins: env.ALLOWED_ORIGINS ? env.ALLOWED_ORIGINS.split(',') : null,
-    maxFileSize: Number(env.MAX_FILE_SIZE || 50 * 1024 * 1024),
+    captchaConfig: cfg.captcha.config,
+    limiter: createRateLimiter({ max: cfg.rateLimitMax, windowMs: 60_000 }),
+    corsOrigin: cfg.corsOrigin,
+    allowedOrigins: cfg.allowedOrigins,
+    maxFileSize: cfg.maxFileSize,
   });
 
-  const port = Number(env.PORT || 3000);
-  const host = env.HOST || '0.0.0.0';
-  await app.listen({ port, host });
+  await app.listen({ port: cfg.port, host: cfg.host });
   return app;
 }
