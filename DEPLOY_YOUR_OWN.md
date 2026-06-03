@@ -37,9 +37,7 @@ Replace "TrueCapture" with your organisation name in the following files:
 | `verify/landing.css` | No text changes needed |
 | `verify/verify/index.html` | `<title>`, header brand name |
 | `verify/sign/index.html` | `<title>`, header brand name |
-| `backend/server.js` | `claim_generator: 'TrueCapture/1.0'` → `'YourOrg/1.0'` |
-| `backend/server.js` | `entity.name: 'TrueCapture'` → your org name |
-| `backend/server.js` | `entity.url` → your domain |
+| `backend/.env` | Set `ORG_NAME` and `ORG_URL` — these become the C2PA claim generator and the signer entity embedded in every manifest. **No backend code edit needed** (`backend/server.js` is a 9-line entry point with no branding literals). |
 | `extension/popup.html` | Extension popup title and branding |
 | `extension/manifest.json` | `"name"`, `"description"` fields |
 
@@ -161,27 +159,20 @@ verify.yourdomain.com  CNAME  your-verify-service.up.railway.app
 
 ---
 
-## Step 8 — Update the backend URL in the extension
+## Step 8 — Point the apps at your backend
 
-Edit `extension/background.js` and `extension/capture.js`:
+**Extension:** open the extension popup and set the **Backend URL** field to your
+backend (`https://api.yourdomain.com`); it is saved per browser. To change the
+built-in default instead, edit `let backendUrl = ...` in `extension/capture.js`
+and `BACKEND_DEFAULT` in `extension/popup.js`. (`extension/background.js` holds no URL.)
 
-```js
-// Change this line:
-const BACKEND_URL = 'https://api.truecapture.global';
-
-// To your backend:
-const BACKEND_URL = 'https://api.yourdomain.com';
-```
-
-Also update `verify/verify/verify.js`:
+**Verify site:** set the default backend in the two static clients:
 
 ```js
-const BACKEND_URL = 'https://api.yourdomain.com';
-```
+// verify/verify/verify.js
+const BACKEND_URL = window.TRUECAPTURE_BACKEND || 'https://api.yourdomain.com';
 
-And `verify/sign/index.html` (inline script near the top):
-
-```js
+// verify/sign/index.html (inline <script> near the top)
 const BACKEND_URL = 'https://api.yourdomain.com';
 ```
 

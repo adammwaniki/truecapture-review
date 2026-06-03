@@ -167,7 +167,7 @@ npm start
 2. Enable **Developer mode**
 3. Click **Load unpacked** → select the `extension/` folder
 
-Update `BACKEND_URL` in `extension/background.js` to point to your local backend.
+Set the **Backend URL** field in the extension popup to your local backend (saved per browser), or edit the `backendUrl` default in `extension/capture.js`.
 
 ---
 
