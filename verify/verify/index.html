@@ -19,49 +19,9 @@
       document.documentElement.classList.add('is-mobile');
     }
 
-    // handleFile — defined in <head> so it exists before the input element is in the DOM.
-    // Guard with window._handling prevents double-processing when onchange + oninput
-    // + polling all fire for the same selection.
-    function handleFile(file) {
-      if (!file || window._handling) return;
-      window._handling = true;
-      // Auto-reset after 3s so future selections aren't blocked
-      setTimeout(function() { window._handling = false; }, 3000);
-
-      console.log('[TrueCapture] handleFile:', file.name, file.type, file.size);
-      updateStatus('File received: ' + file.name);
-      showSection('verifying-section');
-
-      var isHeic = file.type === 'image/heic' || file.type === 'image/heif' ||
-        file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif');
-
-      if (isHeic) {
-        console.warn('[TrueCapture] HEIC file — not supported in browser');
-        showResult('unknown', {
-          title: 'Unsupported Format',
-          description: 'HEIC photos cannot be verified in the browser. Please export the photo as JPEG first: open it in Photos, tap Share \u2192 Save as JPEG, then select that file.',
-          manifest: null,
-        });
-        return;
-      }
-
-      setTimeout(function() { uploadAndVerify(file); }, 50);
-    }
-
-    // startPolling — called onclick so polling begins the moment the picker opens.
-    // Fallback for iOS Safari's known bug where onchange doesn't fire for files
-    // selected from the Files app or Downloads folder.
-    function startPolling(input) {
-      var deadline = Date.now() + 30000;
-      var id = setInterval(function() {
-        if (input.files && input.files.length > 0) {
-          clearInterval(id);
-          handleFile(input.files[0]);
-        } else if (Date.now() > deadline) {
-          clearInterval(id);
-        }
-      }, 100);
-    }
+    // window.handleFile / window.startPolling are defined by verify.js (an ES
+    // module, deferred). The inline onchange/onclick below resolve them as
+    // globals; they exist by the time the user can pick a file.
   </script>
 </head>
 <body>
@@ -110,7 +70,7 @@
             </svg>
           </div>
           <h2>Verify a signed file</h2>
-          <p>Select a signed image or video to check its authenticity</p>
+          <p>Select a signed image or video — it's read in your browser and never uploaded</p>
           <input type="file" id="file-input" accept="image/*,video/*"
                  onchange="handleFile(this.files[0])"
                  oninput="handleFile(this.files[0])"
@@ -143,33 +103,20 @@
           </div>
         </div>
 
-        <!-- Manifest details -->
-        <div class="manifest-details" id="manifest-details">
-          <h3>C2PA Manifest</h3>
-          <div class="detail-grid" id="detail-grid"></div>
-        </div>
+        <!-- Explicit, user-initiated server check (uploads the file) for the
+             forgery-proof signer-vs-DeDi verdict. Hidden until the in-browser
+             read finds a signed, intact file. -->
+        <button class="confirm-signer" id="btn-confirm-signer" style="display:none">Confirm signer with DeDi</button>
 
-        <!-- Assertions -->
-        <div class="assertions-section" id="assertions-section">
-          <h3>Assertions</h3>
-          <div id="assertions-list"></div>
-        </div>
-
-        <!-- DeDi key registry -->
-        <div class="manifest-details" id="dedi-section"></div>
-
-        <!-- Hash comparison -->
-        <div class="hash-section" id="hash-section">
-          <h3>Integrity Check</h3>
-          <div class="hash-compare" id="hash-compare"></div>
-        </div>
+        <!-- DeDi key registry (populated by the server verdict) -->
+        <div class="manifest-details" id="dedi-section" style="display:none"></div>
 
         <button class="verify-another" id="btn-verify-another">Verify Another File</button>
       </div>
     </main>
 
     <footer>
-      <p>TrueCapture uses the <a href="https://c2pa.org" target="_blank" rel="noopener">C2PA</a> standard for content provenance. Verification re-checks the C2PA signature, the content hash, and the signer's key on the <a href="https://dedi.global" target="_blank" rel="noopener">DeDi.global</a> public registry.</p>
+      <p>Your file is read <strong>in your browser</strong> to check it is intact and signed — it is <strong>not uploaded</strong>. Confirming the signer against the <a href="https://dedi.global" target="_blank" rel="noopener">DeDi.global</a> registry is an optional step that sends the file to TrueCapture for that check. Built on the <a href="https://c2pa.org" target="_blank" rel="noopener">C2PA</a> content-provenance standard.</p>
       <p style="margin-top:8px"><a href="https://www.truecapture.global">Learn more about TrueCapture →</a></p>
     </footer>
   </div>

@@ -25,3 +25,20 @@ export function toDisplayModel(result) {
     entityUrl: httpsUrlOrNull(entity && entity.url),
   };
 }
+
+// Maps an in-browser c2pa-web read (no upload) to a display model for the
+// public verify path (H2). The browser can prove content integrity + that the
+// file is signed, but NOT that the signer is genuine — the forgery-proof key
+// check vs DeDi is an explicit server step (canConfirm drives that button).
+export function toBrowserModel(read) {
+  if (!read || read.error) {
+    return { verdict: 'unknown', icon: 'info', title: "Couldn't read in your browser", tone: 'neutral', canConfirm: true };
+  }
+  if (!read.hasManifest) {
+    return { verdict: 'unsigned', icon: 'info', title: 'Not signed', tone: 'neutral', canConfirm: false };
+  }
+  if (read.state === 'Invalid') {
+    return { verdict: 'tampered', icon: 'cross', title: 'Content modified', tone: 'error', canConfirm: false };
+  }
+  return { verdict: 'signed', icon: 'check', title: 'Content intact · signed', tone: 'success', canConfirm: true };
+}

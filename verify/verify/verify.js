@@ -1,9 +1,19 @@
 // Verify page glue. The logic lives in the tested ../lib modules; this module
-// only wires them to the DOM. It calls the real backend (/verify, /verify/:hash)
-// and renders the REAL verdict — no hardcoded authenticity (C1/C2), and only
-// https entity links are rendered (M3).
+// only wires them to the DOM.
+//
+// H2 — privacy-maximal public verify:
+//   • Default (file drop / picker): the file is read IN YOUR BROWSER via the
+//     vendored c2pa-web (./c2pa-read.js). Nothing is uploaded. We can prove the
+//     content is intact and signed, but NOT that the signer is genuine (the key
+//     is not exposed to the browser).
+//   • "Confirm signer with DeDi": an explicit action that uploads the file to
+//     the backend for the forgery-proof key-vs-DeDi check (C1) and the real
+//     verdict (authentic / forged / untrusted).
+//   • Share-link (/verify/<hash> or ?hash=): the file was signed server-side, so
+//     the server already holds it — that path verifies on the server directly.
 import { verifyByUpload, verifyByHash } from '../lib/verify-client.js';
-import { toDisplayModel } from '../lib/render-model.js';
+import { toDisplayModel, toBrowserModel } from '../lib/render-model.js';
+import { readInBrowser } from './c2pa-read.js';
 
 const BACKEND_URL = window.TRUECAPTURE_BACKEND || 'https://api.truecapture.global';
 const doFetch = (url, opts) => fetch(url, opts);
@@ -22,15 +32,13 @@ const DESCRIPTIONS = {
   untrusted: "The signer's key is not currently live on DeDi.global (unregistered or revoked).",
   unsigned: 'This file does not contain a TrueCapture / C2PA signature.',
   unknown: "We couldn't determine this file's status.",
+  signed: 'Read in your browser — your file was not uploaded. Confirm the signer to check it against the DeDi.global registry.',
 };
 
 const $ = (id) => document.getElementById(id);
 
-function escapeText(value) {
-  const div = document.createElement('div');
-  div.textContent = String(value);
-  return div.innerHTML;
-}
+// The file awaiting an explicit server confirm (set by the in-browser read).
+let pendingFile = null;
 
 function showSection(id) {
   ['drop-section', 'verifying-section', 'result-section'].forEach((s) => {
@@ -45,13 +53,25 @@ function updateStatus(msg) {
   if (el) el.textContent = msg;
 }
 
+function paintBanner(verdict, icon, title) {
+  showSection('result-section');
+  $('verdict-banner').className = 'verdict ' + verdict;
+  $('verdict-icon').innerHTML = ICONS[icon] || ICONS.info;
+  $('verdict-title').textContent = title;
+  $('verdict-desc').textContent = DESCRIPTIONS[verdict] || DESCRIPTIONS.unknown;
+}
+
+function setConfirmVisible(visible) {
+  const btn = $('btn-confirm-signer');
+  if (btn) btn.style.display = visible ? '' : 'none';
+}
+
+// Server verdict (forgery-proof): the authoritative result + DeDi entity.
 function render(result) {
   const m = toDisplayModel(result);
-  showSection('result-section');
-  $('verdict-banner').className = 'verdict ' + m.verdict;
-  $('verdict-icon').innerHTML = ICONS[m.icon] || ICONS.info;
-  $('verdict-title').textContent = m.title;
-  $('verdict-desc').textContent = DESCRIPTIONS[m.verdict] || DESCRIPTIONS.unknown;
+  paintBanner(m.verdict, m.icon, m.title);
+  pendingFile = null;
+  setConfirmVisible(false);
 
   const dedi = $('dedi-section');
   if (m.entityName) {
@@ -66,9 +86,45 @@ function render(result) {
   }
 }
 
-async function uploadAndVerify(file) {
+// In-browser read (no upload): content integrity + signed/not. Offers the
+// explicit DeDi confirm when there is something to confirm.
+function renderBrowser(read, file) {
+  const m = toBrowserModel(read);
+  paintBanner(m.verdict, m.icon, m.title);
+  $('dedi-section').style.display = 'none';
+  if (m.canConfirm) {
+    pendingFile = file;
+    setConfirmVisible(true);
+  } else {
+    pendingFile = null;
+    setConfirmVisible(false);
+  }
+}
+
+function escapeText(value) {
+  const div = document.createElement('div');
+  div.textContent = String(value);
+  return div.innerHTML;
+}
+
+async function readLocally(file) {
   showSection('verifying-section');
-  updateStatus('Verifying…');
+  updateStatus('Reading in your browser…');
+  try {
+    renderBrowser(await readInBrowser(file), file);
+  } catch {
+    // Could not load/run the in-browser reader. Do NOT silently upload — show an
+    // error state that lets the user opt into the server check explicitly.
+    renderBrowser({ error: true }, file);
+  }
+}
+
+// Explicit, user-initiated upload for the forgery-proof signer check.
+async function confirmSigner() {
+  if (!pendingFile) return;
+  const file = pendingFile;
+  showSection('verifying-section');
+  updateStatus('Confirming signer with DeDi…');
   try {
     render(await verifyByUpload(doFetch, BACKEND_URL, file));
   } catch {
@@ -83,11 +139,12 @@ window.handleFile = function handleFile(file) {
   setTimeout(() => { window._handling = false; }, 3000);
   const heic = /image\/(heic|heif)/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
   if (heic) {
-    render({ verdict: 'unknown' });
+    paintBanner('unknown', 'info', 'Unsupported Format');
     $('verdict-desc').textContent = 'HEIC photos cannot be verified in the browser — export as JPEG and try again.';
+    setConfirmVisible(false);
     return;
   }
-  setTimeout(() => uploadAndVerify(file), 0);
+  setTimeout(() => readLocally(file), 0);
 };
 
 window.startPolling = function startPolling(input) {
@@ -119,17 +176,22 @@ function init() {
     });
   }
 
+  const confirm = $('btn-confirm-signer');
+  if (confirm) confirm.addEventListener('click', confirmSigner);
+
   const another = $('btn-verify-another');
   if (another) {
     another.addEventListener('click', () => {
       window._handling = false;
+      pendingFile = null;
       showSection('drop-section');
       const fi = $('file-input');
       if (fi) fi.value = '';
     });
   }
 
-  // Share-link flow: truecapture.global/verify/<hash> or ?hash=<hash>
+  // Share-link flow: truecapture.global/verify/<hash> or ?hash=<hash>. The file
+  // was signed server-side, so the server verifies it directly (no user upload).
   const HASH_RE = /^[0-9a-f]{16,32}$/;
   const pathTail = location.pathname.split('/').pop() || '';
   const queryHash = new URLSearchParams(location.search).get('hash') || '';
