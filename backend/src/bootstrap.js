@@ -23,6 +23,7 @@ export async function start(env = process.env) {
     cfg.errors.forEach((e) => console.error('[config] FATAL:', e));
     throw new Error(`Invalid configuration: ${cfg.errors.join(' | ')}`);
   }
+  cfg.warnings.forEach((w) => console.warn('[config] WARNING:', w));
   const here = dirname(fileURLToPath(import.meta.url));
   const keysDir = join(here, '..', '.keys');
 

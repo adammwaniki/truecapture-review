@@ -54,4 +54,11 @@ describe('resolveConfig', () => {
     expect(resolveConfig({ DEDI_API_KEY: 'k', DEDI_NAMESPACE: 'n' }).errors).toHaveLength(1); // missing record id
     expect(resolveConfig({ DEDI_RECORD_ID: 'r' }).errors).toHaveLength(1); // only record id
   });
+
+  it('warns when the public signer is unprotected, not when a control is present (M-1)', () => {
+    expect(resolveConfig({}).warnings).toHaveLength(1); // no captcha, no allowlist
+    expect(resolveConfig({ ALLOWED_ORIGINS: 'https://a' }).warnings).toEqual([]); // allowlist present
+    expect(resolveConfig({ CAPTCHA_SECRET: 's', CAPTCHA_VERIFY_URL: 'https://v' }).warnings).toEqual([]); // captcha enforced
+    expect(resolveConfig({ CAPTCHA_SECRET: 's' }).warnings).toHaveLength(2); // partial captcha + unprotected
+  });
 });

@@ -39,8 +39,22 @@ export function resolveConfig(env) {
     );
   }
 
+  // M-1: the keyless public /sign fails OPEN when unprotected — surface it loudly
+  // rather than silently shipping a public signer guarded only by the rate limit.
+  const warnings = [];
+  if (!captchaEnforced && !allowedOrigins) {
+    warnings.push(
+      'Public /sign is protected only by the per-IP rate limit — no CAPTCHA and no Origin allowlist. ' +
+        'Set CAPTCHA_SECRET + CAPTCHA_VERIFY_URL and/or ALLOWED_ORIGINS before exposing it publicly.',
+    );
+  }
+  if (!captchaEnforced && (env.CAPTCHA_SECRET || env.CAPTCHA_VERIFY_URL)) {
+    warnings.push('CAPTCHA is only partially configured (set BOTH CAPTCHA_SECRET and CAPTCHA_VERIFY_URL) — it is currently disabled.');
+  }
+
   return {
     errors,
+    warnings,
     org,
     orgUrl,
     dedi: { namespace, registry, recordId, apiKey },
