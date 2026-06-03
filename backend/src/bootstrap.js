@@ -6,6 +6,8 @@ import { createC2pa } from './c2pa/index.js';
 import { createSqliteStore } from './store/sqlite.js';
 import { createDedi } from './dedi/index.js';
 import { createCaptchaVerifier } from './captcha.js';
+import { createOidcVerifier } from './oidc/verify.js';
+import { createRemoteJWKSet } from 'jose';
 import { createRateLimiter } from './ratelimit.js';
 import { systemClock } from './clock.js';
 import { createApp } from './app.js';
@@ -43,12 +45,18 @@ export async function start(env = process.env) {
     ? createCaptchaVerifier({ verifyUrl: env.CAPTCHA_VERIFY_URL, secret: env.CAPTCHA_SECRET })
     : { verify: async () => true };
 
+  // OIDC-bound signing (C3b) for authenticated user→content (e.g. mobile wallets).
+  const oidc = env.OIDC_ISSUER && env.OIDC_AUDIENCE && env.OIDC_JWKS_URI
+    ? createOidcVerifier({ issuer: env.OIDC_ISSUER, audience: env.OIDC_AUDIENCE, jwks: createRemoteJWKSet(new URL(env.OIDC_JWKS_URI)) })
+    : { verify: async () => null }; // not configured → /sign/session returns 401
+
   const app = createApp({
     c2pa: createC2pa(keys),
     store: createSqliteStore(join(keysDir, '..', 'records.db')),
     clock: systemClock(),
     dedi,
     identity,
+    oidc,
     captcha,
     limiter: createRateLimiter({ max: Number(env.RATE_LIMIT_MAX || 120), windowMs: 60_000 }),
     corsOrigin: env.CORS_ORIGINS ? env.CORS_ORIGINS.split(',') : false,

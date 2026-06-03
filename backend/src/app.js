@@ -14,6 +14,7 @@ export function createApp({
   clock,
   dedi,
   identity,
+  oidc,
   captcha = { verify: async () => true },
   corsOrigin = false,
   allowedOrigins = null,
@@ -73,6 +74,22 @@ export function createApp({
     if (!data) return reply.code(400).send({ error: 'No file provided' });
     const asset = await data.toBuffer();
     const { signed, verifyHash } = await signAndStore(asset, data.mimetype, data.filename);
+    return sendSigned(reply, data.mimetype, signed, verifyHash);
+  });
+
+  // OIDC-bound sign (C3b): authenticate a user session and bind the verified
+  // user (sub/iss/email) into the manifest, in addition to the org DeDi key.
+  app.post('/sign/session', async (req, reply) => {
+    const authz = req.headers.authorization || '';
+    const token = authz.startsWith('Bearer ') ? authz.slice(7) : '';
+    const claims = token ? await oidc.verify(token) : null;
+    if (!claims) return reply.code(401).send({ error: 'Invalid session' });
+
+    const data = await req.file();
+    if (!data) return reply.code(400).send({ error: 'No file provided' });
+    const asset = await data.toBuffer();
+    const userAssertion = { label: 'org.truecapture.signer', data: { iss: claims.iss, sub: claims.sub, email: claims.email ?? null } };
+    const { signed, verifyHash } = await signAndStore(asset, data.mimetype, data.filename, [userAssertion]);
     return sendSigned(reply, data.mimetype, signed, verifyHash);
   });
 
