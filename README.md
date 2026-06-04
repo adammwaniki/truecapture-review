@@ -75,6 +75,24 @@ TrueCapture implements the [C2PA specification](https://c2pa.org) — the same p
 
 ---
 
+## API
+
+All endpoints are served by the **backend** (Fastify) — locally that's `http://localhost:3000`, **not** the `:8080` verify site. Interactive docs and the spec:
+
+- **Swagger UI** → `GET /docs` (e.g. `http://localhost:3000/docs`)
+- **OpenAPI spec** → `GET /openapi.json`
+
+| Method & path | Purpose |
+|---------------|---------|
+| `GET /health` | Liveness. |
+| `GET /config` | Public client config — CAPTCHA provider + site key, or `null`. |
+| `POST /sign` | Public keyless signing (Origin allowlist + CAPTCHA + per-IP rate limit). Returns the signed asset; verify hash in the `X-Verify-Hash` header. |
+| `POST /sign/session` | Sign bound to an OIDC-authenticated user (when OIDC is configured). |
+| `POST /verify` | Verify an uploaded file → DeDi-anchored verdict. |
+| `GET /verify/:hash` | Verify the stored asset behind a share link. |
+
+---
+
 ## Architecture
 
 ```
@@ -138,6 +156,8 @@ node server.js          # http://localhost:3000
 ```
 
 On first run it generates an EC P-256 CA→leaf chain in `backend/.keys/`. With **no `.env`** it runs in dev mode (no DeDi, CAPTCHA disabled) and logs a one-line warning that `/sign` is unprotected — expected for local.
+
+Browse the API at **`http://localhost:3000/docs`** (Swagger UI; raw spec at `/openapi.json`). These are served by the **backend** — not the `:8080` verify site, where they 404.
 
 ### 2. Test the API directly (fastest — no browser, no CORS)
 
