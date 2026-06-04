@@ -77,10 +77,12 @@ TrueCapture implements the [C2PA specification](https://c2pa.org) — the same p
 
 ## API
 
-All endpoints are served by the **backend** (Fastify) — locally that's `http://localhost:3000`, **not** the `:8080` verify site. Interactive docs and the spec:
+All endpoints are served by the **backend** (Fastify) at its base URL — `http://localhost:3000` in local dev, `https://api.yourdomain.com` (your configured domain) in production — **not** the static verify site (`:8080` locally). The interactive docs and the spec are available in **every** environment the backend runs:
 
-- **Swagger UI** → `GET /docs` (e.g. `http://localhost:3000/docs`)
+- **Swagger UI** → `GET /docs` — e.g. `http://localhost:3000/docs` locally, `https://api.yourdomain.com/docs` in prod
 - **OpenAPI spec** → `GET /openapi.json`
+
+> Note: `/docs` and `/openapi.json` are served **publicly** wherever the backend runs. If you don't want public API docs in production, restrict those paths at your proxy/CDN.
 
 | Method & path | Purpose |
 |---------------|---------|
@@ -276,6 +278,7 @@ Set **Backend URL** + **Verify site URL** in the popup (or the `backendUrl`/`web
 - [ ] `backend/.keys/` on a persistent volume.
 - [ ] All three `DEDI_*` set (or the backend refuses to start), and the key shows live on DeDi.
 - [ ] A backup/rotation plan for the signing key before the 825-day leaf expires.
+- [ ] Decide whether `/docs` + `/openapi.json` should be public; restrict them at the proxy if not.
 
 → Full step-by-step (Railway) walkthrough: **[DEPLOY_YOUR_OWN.md](DEPLOY_YOUR_OWN.md)**.
 
