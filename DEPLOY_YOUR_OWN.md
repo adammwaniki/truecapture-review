@@ -12,7 +12,7 @@ This guide walks any organisation — a news agency, broadcaster, NGO, or indepe
 - A [Railway](https://railway.app) account (free tier works)
 - A [DeDi.global](https://dedi.global) account (free)
 - A domain you control
-- Node.js 20+ installed locally
+- Node.js 22.5+ installed locally (the backend uses the built-in `node:sqlite`)
 
 ---
 

@@ -108,7 +108,7 @@ TrueCapture implements the [C2PA specification](https://c2pa.org) — the same p
 
 ## Tech stack
 
-- **Backend** — Node.js 20+, [Fastify](https://fastify.dev), `@fastify/multipart`, `@fastify/swagger` (OpenAPI + Swagger UI at `/docs`, spec at `/openapi.json`)
+- **Backend** — Node.js 22.5+ (uses the built-in `node:sqlite`), [Fastify](https://fastify.dev), `@fastify/multipart`, `@fastify/swagger` (OpenAPI + Swagger UI at `/docs`, spec at `/openapi.json`)
 - **Signing** — real **C2PA** (COSE_Sign1 / ES256) via [`@contentauth/c2pa-node`](https://opensource.contentauthenticity.org/) — no hand-rolled signing or custom container
 - **Keys** — EC P-256 CA→leaf chain generated with `openssl` + `node:crypto`
 - **Trust** — DeDi-anchored verdict (signer key compared to the [DeDi.global](https://dedi.global) record); see [TRUST_MODEL.md](./TRUST_MODEL.md)
@@ -123,7 +123,7 @@ TrueCapture implements the [C2PA specification](https://c2pa.org) — the same p
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22.5+ (the backend uses the built-in `node:sqlite`)
 - A [DeDi.global](https://dedi.global) account and API key (free)
 
 ### 1. Clone and install
