@@ -119,68 +119,145 @@ TrueCapture implements the [C2PA specification](https://c2pa.org) — the same p
 
 ---
 
-## Quick start (local)
+## Run it locally
+
+Everything runs on your machine. You can drive just the **API with `curl`**, or stand up the **full UI**.
 
 ### Prerequisites
 
-- Node.js 22.5+ (the backend uses the built-in `node:sqlite`)
-- A [DeDi.global](https://dedi.global) account and API key (free)
+- **Node.js 22.5+** — the backend uses the built-in `node:sqlite`.
+- **OpenSSL on your `PATH`** — the backend generates its EC P-256 signing chain with it on first run (`backend/src/keys/chain.js`). Pre-installed on most macOS/Linux systems (`openssl version` to check).
+- DeDi is **optional** locally — see [Getting an `authentic` verdict](#getting-an-authentic-verdict-locally) below.
 
-### 1. Clone and install
+### 1. Start the backend
 
 ```bash
-git clone https://github.com/TanushkaCDPI/truecapture.git
-cd truecapture/backend
+cd backend
 npm install
+node server.js          # http://localhost:3000
 ```
 
-### 2. Configure environment
+On first run it generates an EC P-256 CA→leaf chain in `backend/.keys/`. With **no `.env`** it runs in dev mode (no DeDi, CAPTCHA disabled) and logs a one-line warning that `/sign` is unprotected — expected for local.
+
+### 2. Test the API directly (fastest — no browser, no CORS)
 
 ```bash
-cp .env.example .env
-# Edit .env — add your DeDi API key, org name, and domain
+# sign a file → the verify hash is returned in a response header
+curl -s -D- -o signed.jpg -F file=@your-photo.jpg http://localhost:3000/sign | grep -i x-verify-hash
+
+# verify the signed file (upload)
+curl -s -F file=@signed.jpg http://localhost:3000/verify
+# → {"verdict":"untrusted",...}   (see the DeDi caveat for "authentic")
+
+# verify by hash (the share-link path)
+curl -s http://localhost:3000/verify/<hash-from-the-header>
 ```
 
-See [`.env.example`](.env.example) for all required variables.
+Flip a byte in `signed.jpg` → `tampered`; an unsigned file → `unsigned`.
 
-### 3. Start the backend
+### 3. Run the full UI (verify + sign pages)
 
-```bash
-node server.js
+The static clients default to the **production** backend, so for local you must point them at `localhost` **and** enable CORS for the verify origin.
+
+1. **Point the clients at your local backend:**
+   - `verify/verify/verify.js` (top): `const BACKEND_URL = window.TRUECAPTURE_BACKEND || 'http://localhost:3000';`
+   - `verify/sign/index.html` (inline `<script>` near the top): `const BACKEND_URL = 'http://localhost:3000';`
+2. **Start the backend allowing the verify origin** (CORS is off by default):
+   ```bash
+   cd backend && CORS_ORIGINS=http://localhost:8080 node server.js
+   ```
+3. **Serve the verify site:**
+   ```bash
+   cd verify
+   npm install
+   npm run vendor        # builds the in-browser C2PA reader (c2pa-web bundle + WASM)
+   npm start             # http://localhost:8080
+   ```
+4. Open `http://localhost:8080/verify`, drop `signed.jpg` → **"Content intact · signed"** (read in your browser, no upload) → click **Confirm signer with DeDi** for the server verdict.
+
+> The **sign page on desktop** shows a "use the extension" message (live capture is mobile/extension). On desktop, create signed files via `curl` (step 2) or the extension.
+
+### 4. Chrome extension (optional)
+
+`chrome://extensions` → enable **Developer mode** → **Load unpacked** → select `extension/`. In the popup set **Backend URL** = `http://localhost:3000` and **Verify site URL** = `http://localhost:8080`.
+
+### Getting an `authentic` verdict locally
+
+Without DeDi, a correctly-signed, intact file verifies as **`untrusted`** — there is no published key to bind it to. The verdict only reaches **`authentic`** when the signer's key is live on DeDi.global. To enable it, set **all three** in `backend/.env` (all or none — partial config refuses to start):
+
+```env
+DEDI_API_KEY=your_dedi_api_key
+DEDI_NAMESPACE=your-namespace
+DEDI_RECORD_ID=your-key-record
 ```
 
-On first run the server auto-generates an EC P-256 CA→leaf certificate chain in `backend/.keys/` and registers the public key on DeDi.global.
-
-### 4. Serve the verify site
-
-```bash
-cd ../verify
-npm install
-npm run vendor   # builds the in-browser C2PA reader (c2pa-web bundle + WASM)
-npm start
-# Runs at http://localhost:8080
-```
-
-### 5. Load the Chrome extension
-
-1. Open `chrome://extensions`
-2. Enable **Developer mode**
-3. Click **Load unpacked** → select the `extension/` folder
-
-Set the **Backend URL** field in the extension popup to your local backend (saved per browser), or edit the `backendUrl` default in `extension/capture.js`.
+The key publishes on the next boot; verify then returns `authentic`. See [TRUST_MODEL.md](./TRUST_MODEL.md) for why.
 
 ---
 
-## Deployment
+## Run it in prod
 
-TrueCapture is deployed as two Railway services:
+TrueCapture runs as **two services** — a Node backend (signing + verification) and the static verify/sign site. The reference deployment uses Railway, but any Node 22.5+ host plus a static host works.
 
-| Service | Directory | Domain |
-|---------|-----------|--------|
-| Backend | `backend/` | `api.truecapture.global` |
-| Verify site | `verify/` | `www.truecapture.global` |
+| Service | Directory | Example domain |
+|---------|-----------|----------------|
+| Backend (Fastify) | `backend/` | `api.yourdomain.com` |
+| Verify site (static) | `verify/` | `www.yourdomain.com` |
 
-See [DEPLOY_YOUR_OWN.md](DEPLOY_YOUR_OWN.md) for full step-by-step instructions to run your own branded instance.
+### 1. Backend environment
+
+Set these on the backend service (full template in [`.env.example`](.env.example)):
+
+| Variable | Purpose |
+|----------|---------|
+| `ORG_NAME`, `ORG_URL` | Your org identity — embedded as the C2PA claim generator + signer entity in every manifest. |
+| `DEDI_API_KEY`, `DEDI_NAMESPACE`, `DEDI_RECORD_ID` | DeDi registration — **set all three, or none** (partial config refuses to start). Required for `authentic` verdicts; the signing key publishes on boot. |
+| `DEDI_REGISTRY` | Registry name (default `signing-keys`). |
+| `VERIFY_BASE_URL` | e.g. `https://www.yourdomain.com/verify` — returned to clients as the `X-Verify-URL` share link. |
+| `CORS_ORIGINS` | **Required for the web UI** — your verify site origin(s), comma-separated, so the browser can call the API cross-origin. |
+| `ALLOWED_ORIGINS` | Optional exact-match Origin allowlist for `/sign`. ⚠️ The Chrome extension's `chrome-extension://…` origin is blocked if you set this — leave unset if you rely on the extension. |
+| `CAPTCHA_PROVIDER`, `CAPTCHA_SITE_KEY` | Public CAPTCHA config served to clients via `GET /config` (`turnstile` or `hcaptcha`). |
+| `CAPTCHA_SECRET`, `CAPTCHA_VERIFY_URL` | Server-side CAPTCHA enforcement on `/sign`. Set **all four** to protect the keyless public signer; unset = no CAPTCHA (a startup warning is logged). |
+| `TRUST_PROXY` | `true` behind a CDN/load balancer so the rate limiter keys on the real client IP, not the proxy's. |
+| `RATE_LIMIT_MAX` | Max `/sign`+`/verify` requests per IP per minute (default `120`). |
+| `RETENTION_MS` | Prune stored verify records older than this (unset = kept forever; pruned records' share links stop resolving). |
+| `MAX_FILE_SIZE` | Max upload size in bytes (default 50 MB). |
+| `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URI` | Optional — enables `POST /sign/session` for authenticated-user signing (mobile wallets etc.). |
+| `PORT`, `HOST` | Listen address (default `3000` / `0.0.0.0`). |
+
+### 2. Signing keys (persist them!)
+
+On first boot the backend generates an EC P-256 CA→leaf chain in `backend/.keys/` (needs `openssl`). **Mount `backend/.keys/` on a persistent volume** — regenerating the key changes your published identity and breaks verification of everything signed before. To supply your own chain, place `chain.pem`, `leaf.key`, and `ca.crt` there (commands in [DEPLOY_YOUR_OWN.md](DEPLOY_YOUR_OWN.md)).
+
+### 3. Register your key on DeDi.global
+
+Create a DeDi account → namespace → registry → key record, and set the three `DEDI_*` vars. The backend publishes the leaf certificate on boot so any verifier can bind signatures to your org (see [TRUST_MODEL.md](./TRUST_MODEL.md)). **Without this, verdicts cap at `untrusted`.**
+
+### 4. Point the clients at your backend, then build + serve the site
+
+The static clients default to `https://api.truecapture.global`. Set `BACKEND_URL` in `verify/verify/verify.js` and `verify/sign/index.html` to your backend domain. Then:
+
+```bash
+cd verify && npm ci && npm run vendor && npm start
+```
+
+`npm run vendor` (the c2pa-web bundle + WASM for in-browser verification) **must run at build time**. Any static host works — serve `verify/` with the SPA rewrites in `verify/serve.json`.
+
+### 5. Chrome extension (optional)
+
+Set **Backend URL** + **Verify site URL** in the popup (or the `backendUrl`/`webUrl` defaults in `extension/capture.js`/`popup.js`). If you enable CAPTCHA, add your verify domain to the extension manifest's `content_security_policy.extension_pages` → `frame-src`.
+
+### 6. Hardening checklist
+
+- [ ] HTTPS on both services.
+- [ ] `CORS_ORIGINS` set to your verify origin (and nothing broader).
+- [ ] CAPTCHA configured (all four vars) so the keyless `/sign` isn't open to abuse.
+- [ ] `TRUST_PROXY=true` if behind a CDN/load balancer.
+- [ ] `backend/.keys/` on a persistent volume.
+- [ ] All three `DEDI_*` set (or the backend refuses to start), and the key shows live on DeDi.
+- [ ] A backup/rotation plan for the signing key before the 825-day leaf expires.
+
+→ Full step-by-step (Railway) walkthrough: **[DEPLOY_YOUR_OWN.md](DEPLOY_YOUR_OWN.md)**.
 
 ---
 
