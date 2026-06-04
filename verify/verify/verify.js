@@ -63,8 +63,8 @@ function paintBanner(verdict, icon, title) {
 }
 
 function setConfirmVisible(visible) {
-  const btn = $('btn-confirm-signer');
-  if (btn) btn.style.display = visible ? '' : 'none';
+  const block = $('confirm-block');
+  if (block) block.style.display = visible ? '' : 'none';
 }
 
 // Server verdict (forgery-proof): the authoritative result + DeDi entity.
@@ -96,6 +96,12 @@ function renderBrowser(read, file) {
   if (m.canConfirm) {
     pendingFile = file;
     setConfirmVisible(true);
+    // When the in-browser read couldn't run, frame it as a next step toward the
+    // server/DeDi check rather than a dead end.
+    if (m.verdict === 'unknown') {
+      $('verdict-desc').textContent =
+        "Your browser couldn't read this file's signature — confirm the signer below to check it against the DeDi.global registry on our server.";
+    }
   } else {
     pendingFile = null;
     setConfirmVisible(false);

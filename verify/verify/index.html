@@ -106,8 +106,11 @@
 
         <!-- Explicit, user-initiated server check (uploads the file) for the
              forgery-proof signer-vs-DeDi verdict. Hidden until the in-browser
-             read finds a signed, intact file. -->
-        <button class="confirm-signer" id="btn-confirm-signer" style="display:none">Confirm signer with DeDi</button>
+             read finds a signed/intact file (or can't read it locally). -->
+        <div id="confirm-block" style="display:none">
+          <button class="confirm-signer" id="btn-confirm-signer">Confirm signer on DeDi.global</button>
+          <p class="confirm-hint">Sends your file to TrueCapture to check the signer's key against the public <a href="https://dedi.global" target="_blank" rel="noopener">DeDi.global</a> registry.</p>
+        </div>
 
         <!-- DeDi key registry (populated by the server verdict) -->
         <div class="manifest-details" id="dedi-section" style="display:none"></div>

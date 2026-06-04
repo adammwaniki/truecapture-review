@@ -67,6 +67,9 @@ test('signed file: in-browser read says "Content intact · signed" with NO uploa
   await expect(page.locator('#verdict-title')).toHaveText('Content intact · signed', { timeout: 20000 });
   await expect(page.locator('#verdict-banner')).toHaveClass(/signed/);
   await expect(page.locator('#btn-confirm-signer')).toBeVisible();
+  // styled as a primary button (filled --accent), not an unstyled default — guards
+  // against the rule landing in the wrong stylesheet again.
+  await expect(page.locator('#btn-confirm-signer')).toHaveCSS('background-color', 'rgb(99, 102, 241)');
   expect(posts).toBe(0); // PROVEN: the in-browser read uploaded nothing
 
   await page.click('#btn-confirm-signer');

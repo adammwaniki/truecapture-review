@@ -410,6 +410,40 @@ main {
   color: var(--accent);
 }
 
+/* Primary call-to-action: the explicit "Confirm signer on DeDi.global" step.
+   Filled accent (vs the bordered "Verify Another File") so it reads as the
+   recommended next action; matches the page's tokens + radius. */
+.confirm-signer {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.confirm-signer:hover {
+  background: #4f46e5;
+  border-color: #4f46e5;
+}
+
+.confirm-hint {
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.5;
+  margin: 10px 4px 24px;
+}
+
+.confirm-hint a { color: var(--accent); text-decoration: none; }
+.confirm-hint a:hover { text-decoration: underline; }
+
 footer {
   border-top: 1px solid var(--border);
   padding: 24px 0;
