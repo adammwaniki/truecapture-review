@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: [20, 22]
+        node: [22, 24] # node:sqlite (store) requires >= 22.5
     defaults:
       run:
         working-directory: backend
@@ -19,9 +19,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      # package-lock is regenerated whenever deps change; use install (not ci)
-      # until the lockfile is committed alongside the dependency swap (M5b).
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - run: npm run coverage   # fails below the 100% threshold
 
   frontend:
@@ -35,7 +33,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - run: npm run coverage   # 100% on verify/lib
 
   e2e:
@@ -49,12 +47,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       # Build the vendored c2pa-web bundle + WASM from node_modules so the H2
       # in-browser tests run here (instead of skipping). Regenerated, so CI does
       # not need to pull the Git LFS object.
       - name: Build verify vendor (H2 in-browser reader)
         working-directory: verify
-        run: npm install --no-audit --no-fund && npm run vendor
+        run: npm ci --no-audit --no-fund && npm run vendor
       - run: npm run test:e2e

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { generateKeyPairSync, X509Certificate } from 'node:crypto';
 import { extractDediRef } from './dedi-ref.js';
-import { verdictFor } from './verdict.js';
+import { verdictFor, isContentTampered } from './verdict.js';
 import { publicKeysEqual, toSpkiB64 } from './keymatch.js';
 
 const storeWith = (assertions) => ({ active_manifest: 'm', manifests: { m: { assertions } } });
@@ -29,12 +29,29 @@ describe('extractDediRef', () => {
 describe('verdictFor', () => {
   const base = { hasManifest: true, validationState: 'Valid', hasRef: true, record: { state: 'live' }, keyMatches: true };
   it('unsigned when no manifest', () => expect(verdictFor({ ...base, hasManifest: false })).toBe('unsigned'));
-  it('tampered when validation not Valid', () => expect(verdictFor({ ...base, validationState: 'Invalid' })).toBe('tampered'));
+  it('tampered when invalid due to a content-hash mismatch', () => expect(verdictFor({ ...base, validationState: 'Invalid', contentTampered: true })).toBe('tampered'));
+  it('invalid when not Valid but not content-tampered (e.g. broken signature)', () => expect(verdictFor({ ...base, validationState: 'Invalid', contentTampered: false })).toBe('invalid'));
   it('untrusted when no dedi reference', () => expect(verdictFor({ ...base, hasRef: false })).toBe('untrusted'));
   it('untrusted when record missing', () => expect(verdictFor({ ...base, record: null })).toBe('untrusted'));
   it('untrusted when record not live', () => expect(verdictFor({ ...base, record: { state: 'revoked' } })).toBe('untrusted'));
   it('forged when key does not match', () => expect(verdictFor({ ...base, keyMatches: false })).toBe('forged'));
   it('authentic when live and key matches', () => expect(verdictFor(base)).toBe('authentic'));
+});
+
+describe('isContentTampered', () => {
+  it('true for a hash-mismatch status code', () => {
+    expect(isContentTampered([{ code: 'assertion.hashedURI.mismatch' }])).toBe(true);
+    expect(isContentTampered([{ code: 'signingCredential.untrusted' }, { code: 'assertion.dataHash.mismatch' }])).toBe(true);
+  });
+  it('false for a non-hash failure (untrusted signer / bad signature)', () => {
+    expect(isContentTampered([{ code: 'signingCredential.untrusted' }])).toBe(false);
+    expect(isContentTampered([{ code: 'claimSignature.mismatch' }])).toBe(false); // mismatch but not a hash
+  });
+  it('false for empty / non-array / malformed entries', () => {
+    expect(isContentTampered([])).toBe(false);
+    expect(isContentTampered(null)).toBe(false);
+    expect(isContentTampered([{}, { code: 5 }, null])).toBe(false);
+  });
 });
 
 describe('keymatch', () => {

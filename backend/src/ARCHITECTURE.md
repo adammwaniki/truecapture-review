@@ -12,7 +12,7 @@ implemented **inside** these seams, test-first.
 |------|--------|----------|-----------------|---------|
 | `clock` | `src/clock.js` | `now() -> Date` | `systemClock()` | — |
 | `store` | `src/store/{memory,sqlite}.js` | `put/get/has/size` (+ retention) | SQLite (`node:sqlite`); memory for tests | H1 |
-| `c2pa` | `src/c2pa/` | `sign(asset,mime,manifest)->Buffer`, `read(asset,mime)->{validationState,manifestStore}\|null` | `@contentauth/c2pa-node` + `c2patool` fallback | C4 |
+| `c2pa` | `src/c2pa/` | `sign(asset,mime,manifest)->Buffer`, `read(asset,mime)->{validationState,validationStatus,manifestStore}\|null` | `@contentauth/c2pa-node` (single engine; no fallback) | C4 |
 | `verify` | `src/verify/` | `verifyAsset({c2pa,dedi},bytes,mime)->{verdict,entity}` — DeDi-anchored, see `../../TRUST_MODEL.md` | — | C1/C2/M5c |
 | `dedi` | `src/dedi/http.js` | `lookup(recordId)->{state,publicKey,entity}`, `publish(key,identity)->{recordId}` | DeDi HTTP API (reads `details.publicKey`) | C1 |
 | `keys` | `src/keys/chain.js` | EC P-256 (PKCS#8) + X.509 CA→leaf chain (`ensureChain`) | `crypto` / `openssl` | C5 |

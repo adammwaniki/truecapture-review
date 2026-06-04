@@ -39,6 +39,27 @@ describe('createDedi / createHttpDedi.lookup', () => {
     const dedi = createHttpDedi({ fetchImpl: async () => res(true, {}) });
     expect(await dedi.lookup(ref)).toBeNull();
   });
+
+  it('returns null (fail closed) when the lookup fetch throws — timeout/network (L-3)', async () => {
+    const dedi = createHttpDedi({ fetchImpl: async () => { throw new Error('timeout'); } });
+    expect(await dedi.lookup(ref)).toBeNull();
+  });
+
+  it('caches a lookup within the TTL and refetches after it expires (L-3)', async () => {
+    let calls = 0;
+    let t = 0;
+    const dedi = createHttpDedi({
+      now: () => t,
+      cacheTtlMs: 1000,
+      fetchImpl: async () => { calls += 1; return res(true, { data: { records: [{ record_id: 'rec-1', state: 'live', details: {} }] } }); },
+    });
+    await dedi.lookup(ref);
+    await dedi.lookup(ref);
+    expect(calls).toBe(1); // second served from cache
+    t = 2000;
+    await dedi.lookup(ref);
+    expect(calls).toBe(2); // TTL elapsed → refetch
+  });
 });
 
 describe('createHttpDedi.publish', () => {
@@ -60,6 +81,11 @@ describe('createHttpDedi.publish', () => {
 
   it('returns false on a non-ok response', async () => {
     const dedi = createHttpDedi({ apiKey: 'x', fetchImpl: async () => res(false, {}) });
+    expect(await dedi.publish({ namespace: 'n', registry: 'r', recordName: 'x', publicKeyPem: 'p', keyType: 'ES256', entity: {} })).toBe(false);
+  });
+
+  it('returns false when the publish request throws (L-3)', async () => {
+    const dedi = createHttpDedi({ apiKey: 'x', fetchImpl: async () => { throw new Error('net'); } });
     expect(await dedi.publish({ namespace: 'n', registry: 'r', recordName: 'x', publicKeyPem: 'p', keyType: 'ES256', entity: {} })).toBe(false);
   });
 });

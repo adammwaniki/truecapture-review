@@ -72,6 +72,7 @@
           <h2>Verify a signed file</h2>
           <p>Select a signed image or video — it's read in your browser and never uploaded</p>
           <input type="file" id="file-input" accept="image/*,video/*"
+                 aria-label="Choose a signed image or video to verify"
                  onchange="handleFile(this.files[0])"
                  oninput="handleFile(this.files[0])"
                  onclick="startPolling(this)"
@@ -95,7 +96,7 @@
       <!-- Result -->
       <div id="result-section" class="hidden">
         <!-- Verdict banner -->
-        <div class="verdict" id="verdict-banner">
+        <div class="verdict" id="verdict-banner" role="status" aria-live="polite">
           <div class="verdict-icon" id="verdict-icon"></div>
           <div class="verdict-text">
             <h2 id="verdict-title"></h2>

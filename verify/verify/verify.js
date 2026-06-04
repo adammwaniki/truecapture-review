@@ -28,6 +28,7 @@ const ICONS = {
 const DESCRIPTIONS = {
   authentic: 'The content is unchanged since signing, and the signing key is registered to the organisation below on DeDi.global.',
   tampered: 'This file carries a signature, but its content has changed since it was signed.',
+  invalid: 'This file carries a signature that could not be validated — it may be corrupted or was not produced as claimed.',
   forged: "This file's signature does not match the key registered to the claimed organisation on DeDi.global.",
   untrusted: "The signer's key is not currently live on DeDi.global (unregistered or revoked).",
   unsigned: 'This file does not contain a TrueCapture / C2PA signature.',
@@ -192,6 +193,9 @@ function init() {
 
   // Share-link flow: truecapture.global/verify/<hash> or ?hash=<hash>. The file
   // was signed server-side, so the server verifies it directly (no user upload).
+  // Contract: the backend emits a 24-char lowercase-hex verify hash
+  // (sha256(signed).slice(0,24) — see backend src/app.js signAndStore). This
+  // accepts 16–32 lowercase hex; keep it in sync if that format ever changes.
   const HASH_RE = /^[0-9a-f]{16,32}$/;
   const pathTail = location.pathname.split('/').pop() || '';
   const queryHash = new URLSearchParams(location.search).get('hash') || '';

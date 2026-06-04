@@ -11,9 +11,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // Real C2PA engine over @contentauth/c2pa-node (ES256 / COSE_Sign1 / JUMBF).
-// The leaf signs; `trustAnchors` is the anchor the signature must chain to —
-// in C1 this is set to the org's DeDi-published cert, so a signature that does
-// NOT chain to it verifies as non-Valid (forgery-proof).
+// The leaf signs; `trustAnchors` is the org CA. NB: an untrusted signer does NOT
+// make validation_state non-Valid (an intact, validly-signed file stays Valid and
+// merely carries a signingCredential.untrusted status) — forgery protection is the
+// DeDi signer-key compare in the verify pipeline (C1), not trust-anchor chaining.
 //
 // Two v0.5.5 quirks handled here (see truecap-spike-c2pa-dedi.md):
 //  - sign(): the embedded asset is the mutated `output.buffer`, NOT the return value.
@@ -49,6 +50,7 @@ export function createContentAuthC2pa({ chainPem, leafKeyPem, caCertPem }) {
         const manifest = store.manifests[store.active_manifest];
         return {
           validationState: store.validation_state,
+          validationStatus: store.validation_status,
           signatureInfo: manifest.signature_info,
           manifestStore: store,
         };

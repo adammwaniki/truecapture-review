@@ -60,7 +60,7 @@ Contact [tanushka@cdpi.dev](mailto:tanushka@cdpi.dev) to discuss integration.
 
 2. **Sign** — the browser sends the file to the backend signing server (the public endpoint has **no secret key**; it is guarded by a CAPTCHA, an Origin allowlist, and a per-IP rate limit — and a separate OIDC-bound endpoint exists for authenticated users). The server:
    - Builds a standards-compliant **C2PA manifest** — a content hard-binding, a `c2pa.actions` assertion, a coarse capture device class (iOS/Android/Desktop; never the raw user-agent), and the signer's DeDi reference
-   - Signs it as **COSE_Sign1 / ES256** with the EC P-256 leaf key via [`@contentauth/c2pa-node`](https://opensource.contentauthenticity.org/) (with a `c2patool` fallback) — no hand-rolled signing or custom container
+   - Signs it as **COSE_Sign1 / ES256** with the EC P-256 leaf key via [`@contentauth/c2pa-node`](https://opensource.contentauthenticity.org/) — no hand-rolled signing or custom container
    - Embeds the manifest into the file per the C2PA spec, stores the verify hash **durably** (SQLite), and returns the signed file + a short verify URL
 
 3. **Register** — the signer's public key is registered on [DeDi.global](https://dedi.global), a decentralised public key directory. The manifest embeds the DeDi record ID so any verifier can independently confirm the key belongs to the claimed organisation.
@@ -108,8 +108,8 @@ TrueCapture implements the [C2PA specification](https://c2pa.org) — the same p
 
 ## Tech stack
 
-- **Backend** — Node.js 20+, [Fastify](https://fastify.dev), `@fastify/multipart`, `@fastify/swagger` (OpenAPI + Swagger UI at `/docs`, spec at `/openapi.json`)
-- **Signing** — real **C2PA** (COSE_Sign1 / ES256) via [`@contentauth/c2pa-node`](https://opensource.contentauthenticity.org/) with a `c2patool` fallback — no hand-rolled signing or custom container
+- **Backend** — Node.js 22.5+ (uses the built-in `node:sqlite`), [Fastify](https://fastify.dev), `@fastify/multipart`, `@fastify/swagger` (OpenAPI + Swagger UI at `/docs`, spec at `/openapi.json`)
+- **Signing** — real **C2PA** (COSE_Sign1 / ES256) via [`@contentauth/c2pa-node`](https://opensource.contentauthenticity.org/) — no hand-rolled signing or custom container
 - **Keys** — EC P-256 CA→leaf chain generated with `openssl` + `node:crypto`
 - **Trust** — DeDi-anchored verdict (signer key compared to the [DeDi.global](https://dedi.global) record); see [TRUST_MODEL.md](./TRUST_MODEL.md)
 - **Storage** — SQLite (`node:sqlite`) for verify-hash records (durable, with retention)
@@ -123,7 +123,7 @@ TrueCapture implements the [C2PA specification](https://c2pa.org) — the same p
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22.5+ (the backend uses the built-in `node:sqlite`)
 - A [DeDi.global](https://dedi.global) account and API key (free)
 
 ### 1. Clone and install
@@ -167,7 +167,7 @@ npm start
 2. Enable **Developer mode**
 3. Click **Load unpacked** → select the `extension/` folder
 
-Update `BACKEND_URL` in `extension/background.js` to point to your local backend.
+Set the **Backend URL** field in the extension popup to your local backend (saved per browser), or edit the `backendUrl` default in `extension/capture.js`.
 
 ---
 

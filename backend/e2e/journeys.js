@@ -1,12 +1,14 @@
 // Canonical user-journey registry — the source of truth for e2e flow coverage.
-// Every entry must have a corresponding spec; CI fails a journey without one
-// (wired as the journeys are implemented). Every verdict outcome is required.
+// Each journey names the spec that covers it (registry.spec.js fails CI if that
+// file is missing), and the `verdict` set must cover every verdict the verifier
+// can emit (kept in sync with src/verify/verdict.js).
 export const JOURNEYS = [
-  { id: 'sign-photo', desc: 'capture/upload a photo → sign → download signed file', verdict: null },
-  { id: 'verify-authentic', desc: 'verify a genuine signed file', verdict: 'authentic' },
-  { id: 'verify-tampered', desc: 'verify a modified file', verdict: 'tampered' },
-  { id: 'verify-unsigned', desc: 'verify a file with no manifest', verdict: 'unsigned' },
-  { id: 'verify-forged-key', desc: 'attacker key + copied dedi_record_id', verdict: 'forged-key' },
-  { id: 'verify-revoked-key', desc: 'signer key revoked in DeDi', verdict: 'revoked-key' },
-  { id: 'verify-link', desc: 'open a share link → content-bound verdict', verdict: null },
+  { id: 'sign-photo', desc: 'sign a photo through the backend → download signed file', verdict: null, spec: 'fullstack.spec.js' },
+  { id: 'verify-authentic', desc: 'sign → verify page in-browser read → confirm → authentic', verdict: 'authentic', spec: 'fullstack.spec.js' },
+  { id: 'verify-tampered', desc: 'verify a file with modified content', verdict: 'tampered', spec: 'verify-route.test.js' },
+  { id: 'verify-invalid', desc: 'verify a file whose signature is invalid but content untampered', verdict: 'invalid', spec: 'verify.test.js' },
+  { id: 'verify-unsigned', desc: 'verify a file with no C2PA manifest', verdict: 'unsigned', spec: 'verify-route.test.js' },
+  { id: 'verify-forged', desc: 'attacker key + copied DeDi record id → forged', verdict: 'forged', spec: 'verify-route.test.js' },
+  { id: 'verify-untrusted', desc: 'signer key revoked or unknown in DeDi → untrusted', verdict: 'untrusted', spec: 'verify-route.test.js' },
+  { id: 'verify-link', desc: 'open a share link → content-bound server verdict', verdict: null, spec: 'verify-link.test.js' },
 ];

@@ -6,6 +6,7 @@ import { httpsUrlOrNull } from './safe-url.js';
 const VERDICTS = {
   authentic: { icon: 'check', title: 'Authentic', tone: 'success' },
   tampered: { icon: 'cross', title: 'Tampered', tone: 'error' },
+  invalid: { icon: 'cross', title: 'Invalid signature', tone: 'error' },
   forged: { icon: 'cross', title: 'Forged', tone: 'error' },
   untrusted: { icon: 'warn', title: 'Untrusted signer', tone: 'warning' },
   unsigned: { icon: 'info', title: 'Not signed', tone: 'neutral' },

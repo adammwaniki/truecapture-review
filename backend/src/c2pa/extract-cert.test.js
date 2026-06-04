@@ -46,4 +46,11 @@ describe('extractSignerSpki', () => {
   it('skips a 30 82 candidate that is not a valid certificate', () => {
     expect(extractSignerSpki(Buffer.from([0x30, 0x82, 0x00, 0x02, 0x01, 0x02]))).toBeNull();
   });
+
+  it('handles all DER long-form lengths and skips short/over-long forms (M-3)', () => {
+    expect(extractSignerSpki(Buffer.from([0x30, 0x05, 0x01]))).toBeNull(); // short form (< 0x81) skipped
+    expect(extractSignerSpki(Buffer.from([0x30, 0x85, 0x00]))).toBeNull(); // > 4-octet length skipped
+    expect(extractSignerSpki(Buffer.from([0x00, 0x30, 0x83]))).toBeNull(); // long-form header runs past end
+    expect(extractSignerSpki(Buffer.from([0x30, 0x81, 0x02, 0x01, 0x02]))).toBeNull(); // 1-octet form, not a cert
+  });
 });

@@ -12,7 +12,7 @@ This guide walks any organisation — a news agency, broadcaster, NGO, or indepe
 - A [Railway](https://railway.app) account (free tier works)
 - A [DeDi.global](https://dedi.global) account (free)
 - A domain you control
-- Node.js 20+ installed locally
+- Node.js 22.5+ installed locally (the backend uses the built-in `node:sqlite`)
 
 ---
 
@@ -37,9 +37,7 @@ Replace "TrueCapture" with your organisation name in the following files:
 | `verify/landing.css` | No text changes needed |
 | `verify/verify/index.html` | `<title>`, header brand name |
 | `verify/sign/index.html` | `<title>`, header brand name |
-| `backend/server.js` | `claim_generator: 'TrueCapture/1.0'` → `'YourOrg/1.0'` |
-| `backend/server.js` | `entity.name: 'TrueCapture'` → your org name |
-| `backend/server.js` | `entity.url` → your domain |
+| `backend/.env` | Set `ORG_NAME` and `ORG_URL` — these become the C2PA claim generator and the signer entity embedded in every manifest. **No backend code edit needed** (`backend/server.js` is a 9-line entry point with no branding literals). |
 | `extension/popup.html` | Extension popup title and branding |
 | `extension/manifest.json` | `"name"`, `"description"` fields |
 
@@ -87,9 +85,10 @@ DeDi.global is a decentralised public key directory. Registering your key there 
 1. Create an account at [dedi.global](https://dedi.global)
 2. Create a **namespace** (e.g. `bbc` or `reuters`)
 3. Create a **registry** called `signing-keys` inside your namespace
-4. Note your **API key** from the DeDi dashboard
+4. Choose a **record id/name** for your key (e.g. `signing-key-2026`)
+5. Note your **API key** from the DeDi dashboard
 
-The backend registers your public key automatically on first start, using the `DEDI_API_KEY` and `DEDI_NAMESPACE` environment variables.
+The backend registers your public key automatically on first start, using the `DEDI_API_KEY`, `DEDI_NAMESPACE`, and `DEDI_RECORD_ID` environment variables. **All three are required** — verification can only return `authentic` for a key it can look up by record id, so the backend refuses to start if these are only partially configured.
 
 For manual registration or more detail, see the [DeDi API docs](https://dedi.global/docs).
 
@@ -106,10 +105,13 @@ cp .env.example backend/.env
 Edit `backend/.env`:
 
 ```env
-# DeDi key registry
+# DeDi key registry — set ALL of API key + namespace + record id together, or
+# verification can never reach "authentic" (signed files fall back to "untrusted").
+# The backend refuses to start if these are only partially set.
 DEDI_API_KEY=your_dedi_api_key_here
 DEDI_NAMESPACE=your_org_namespace        # e.g. "bbc" or "reuters"
 DEDI_REGISTRY=signing-keys
+DEDI_RECORD_ID=your_org_key_record       # the record your public key is published under
 
 # Your organisation
 ORG_NAME=Your Organisation Name
@@ -157,27 +159,29 @@ verify.yourdomain.com  CNAME  your-verify-service.up.railway.app
 
 ---
 
-## Step 8 — Update the backend URL in the extension
+## Step 8 — Point the apps at your backend
 
-Edit `extension/background.js` and `extension/capture.js`:
+**Extension:** open the extension popup and set the **Backend URL** and **Verify
+site URL** fields to your domains (saved per browser). The verify-site URL is used
+to build the share link shown after signing. To change the built-in defaults
+instead, edit `backendUrl`/`webUrl` in `extension/capture.js` and `BACKEND_DEFAULT`/`WEB_DEFAULT`
+in `extension/popup.js`. (`extension/background.js` holds no URL.)
 
-```js
-// Change this line:
-const BACKEND_URL = 'https://api.truecapture.global';
+> **If you enable CAPTCHA:** the extension embeds the hosted CAPTCHA widget from
+> your verify site in an iframe, so add your verify domain to
+> `extension/manifest.json` → `content_security_policy.extension_pages` →
+> `frame-src` (pinned to `https://www.truecapture.global` by default).
 
-// To your backend:
-const BACKEND_URL = 'https://api.yourdomain.com';
-```
+Set `VERIFY_BASE_URL` in `backend/.env` so the backend returns an `X-Verify-URL`
+header pointing at your verify site (the clients use it for the share link).
 
-Also update `verify/verify/verify.js`:
-
-```js
-const BACKEND_URL = 'https://api.yourdomain.com';
-```
-
-And `verify/sign/index.html` (inline script near the top):
+**Verify site:** set the default backend in the two static clients:
 
 ```js
+// verify/verify/verify.js
+const BACKEND_URL = window.TRUECAPTURE_BACKEND || 'https://api.yourdomain.com';
+
+// verify/sign/index.html (inline <script> near the top)
 const BACKEND_URL = 'https://api.yourdomain.com';
 ```
 
