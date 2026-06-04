@@ -33,12 +33,12 @@ under its own identity, in the DeDi public registry.
 The certificate therefore functions as a **key carrier** that satisfies the
 C2PA/COSE signing format (PKCS#8 leaf, `keyUsage=digitalSignature`,
 `extendedKeyUsage=emailProtection`, chained to a CA so c2pa accepts it — see the
-spike note `truecap-spike-c2pa-dedi.md`). The leaf's public key is the thing
+spike note `docs/review/truecap-spike-c2pa-dedi.md`). The leaf's public key is the thing
 that must match DeDi.
 
 ## Why not the C2PA trust list or a public CA
 
-Two findings from the integration spike (`truecap-spike-c2pa-dedi.md`) make a
+Two findings from the integration spike (`docs/review/truecap-spike-c2pa-dedi.md`) make a
 CA/trust-list model unsafe to rely on here:
 
 - **The C2PA reader's trust-list verification does not honour custom anchors.**
@@ -134,4 +134,4 @@ mismatch, null inputs).
 - DeDi reference assertion — `backend/src/verify/dedi-ref.js` (`extractDediRef`)
 - DeDi lookup (live key/state) — `backend/src/dedi/http.js`
 - Key/cert generation — `backend/src/keys/chain.js` (`ensureChain`)
-- Integration findings that motivated this model — `truecap-spike-c2pa-dedi.md`
+- Integration findings that motivated this model — `docs/review/truecap-spike-c2pa-dedi.md`

@@ -2,7 +2,7 @@
 
 The backend is being refactored out of the legacy `../server.js` monolith into
 small modules behind interfaces, so every error path is reachable from a fake
-and the codebase can hold **100% coverage** (see `../../truecap-remediation-plan.md`
+and the codebase can hold **100% coverage** (see `../../docs/review/truecap-remediation-plan.md`
 → "Test architecture"). Findings C1/C2/C4/C5/C3/C3b/H1/H3/H4/M3/M4/M5c are
 implemented **inside** these seams, test-first.
 
@@ -33,6 +33,6 @@ injected seams only. Tests build it with fakes and use `app.inject(...)`. The
 exclusion.
 
 ## Key spike findings baked into these contracts
-(see `../../truecap-spike-c2pa-dedi.md`)
+(see `../../docs/review/truecap-spike-c2pa-dedi.md`)
 - C2PA signer needs a **PKCS#8** EC key and a **CA→leaf chain** (self-signed leaf is rejected); verdict comes from `reader.json().validation_state` **plus** the DeDi key compare.
 - DeDi already serves `details.publicKey`; browser-direct DeDi calls hit a CORS `Origin`→500, so the `dedi` seam is server-side (client-side verify resolves CORS separately — H2).

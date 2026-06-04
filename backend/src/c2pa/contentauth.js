@@ -16,7 +16,7 @@ import { join } from 'node:path';
 // merely carries a signingCredential.untrusted status) — forgery protection is the
 // DeDi signer-key compare in the verify pipeline (C1), not trust-anchor chaining.
 //
-// Two v0.5.5 quirks handled here (see truecap-spike-c2pa-dedi.md):
+// Two v0.5.5 quirks handled here (see docs/review/truecap-spike-c2pa-dedi.md):
 //  - sign(): the embedded asset is the mutated `output.buffer`, NOT the return value.
 //  - read(): in-memory buffer reads throw UnsupportedType, so reads go via a temp file.
 export function createContentAuthC2pa({ chainPem, leafKeyPem, caCertPem }) {

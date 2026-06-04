@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // Generates/loads an EC P-256 CA→leaf chain for C2PA ES256 signing.
-// Spike findings (truecap-spike-c2pa-dedi.md): the signer needs a PKCS#8 leaf
+// Spike findings (docs/review/truecap-spike-c2pa-dedi.md): the signer needs a PKCS#8 leaf
 // key, and a self-signed leaf is rejected — the leaf must chain to a CA that is
 // then used as the c2pa trust anchor (digitalSignature + emailProtection EKU).
 function openssl(args) {

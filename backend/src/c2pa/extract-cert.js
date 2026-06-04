@@ -5,7 +5,7 @@ import { X509Certificate } from 'node:crypto';
 //
 // Why this exists: c2pa-node v0.5.5's Reader does NOT expose the signer key, and
 // its trust-list verification does not honor custom anchors (see
-// truecap-spike-c2pa-dedi.md). So C1 binds identity by extracting the signer
+// docs/review/truecap-spike-c2pa-dedi.md). So C1 binds identity by extracting the signer
 // cert here and comparing its key to the DeDi-published key (see keymatch.js).
 //
 // Method: scan for an ASN.1 SEQUENCE (`0x30`) with a DER *definite long-form*
