@@ -68,6 +68,18 @@ describe('toCombinedModel (two-axis verify result)', () => {
     expect(m.entityUrl).toBeNull();
   });
 
+  it('pending signer (in-browser preview): signature known, signer "Checking…"', () => {
+    const valid = toCombinedModel({ signature: 'valid', signer: 'pending' });
+    expect(valid.verdict).toBe('checking');
+    expect(valid.headline).toBe('Signed — confirming signer…');
+    expect(valid.signerLabel).toBe('Checking DeDi.global…');
+    // signature problems show immediately, signer still pending
+    expect(toCombinedModel({ signature: 'modified', signer: 'pending' }).verdict).toBe('tampered');
+    expect(toCombinedModel({ signature: 'modified', signer: 'pending' }).signerLabel).toBe('Checking DeDi.global…');
+    // nothing to attribute when unsigned
+    expect(toCombinedModel({ signature: 'none', signer: 'pending' }).signerLabel).toBeNull();
+  });
+
   it('degrades gracefully for partial/unexpected values (defensive fallbacks)', () => {
     // a verdict with no axes → axes default to 'none'
     const a = toCombinedModel({ verdict: 'authentic' });

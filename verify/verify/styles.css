@@ -201,6 +201,14 @@ main {
   border-color: var(--border, #e2e8f0);
 }
 
+/* In-browser preview while the server confirms the signer. */
+.verdict.checking {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: var(--accent);
+}
+.verdict.checking .verdict-icon { background: rgba(99, 102, 241, 0.15); color: var(--accent); }
+.verdict.checking .verdict-text h2 { color: var(--accent); }
+
 .verdict-icon {
   width: 56px;
   height: 56px;

@@ -29,6 +29,7 @@ export function toCombinedModel(result) {
 
   const signature = r.signature || 'none';
   const signer = r.signer || 'none';
+  const pending = signer === 'pending'; // fast in-browser preview: signature known, signer still checking
   const entity = r.entity || null;
 
   let verdict;
@@ -40,6 +41,8 @@ export function toCombinedModel(result) {
     verdict = 'tampered'; icon = 'cross'; headline = 'Content modified since signing';
   } else if (signature === 'invalid') {
     verdict = 'invalid'; icon = 'cross'; headline = 'Signature could not be validated';
+  } else if (pending) {
+    verdict = 'checking'; icon = 'info'; headline = 'Signed — confirming signer…';
   } else if (signer === 'verified') {
     verdict = 'authentic'; icon = 'check'; headline = 'Authentic';
   } else if (signer === 'mismatch') {
@@ -55,7 +58,7 @@ export function toCombinedModel(result) {
     icon,
     headline,
     signatureLabel: SIGNATURE_LABEL[signature] || SIGNATURE_LABEL.none,
-    signerLabel: signature === 'none' ? null : SIGNER_LABEL[signer] || null,
+    signerLabel: signature === 'none' ? null : (pending ? 'Checking DeDi.global…' : SIGNER_LABEL[signer] || null),
     entityName: (entity && entity.name) || null,
     entityUrl: httpsUrlOrNull(entity && entity.url),
   };

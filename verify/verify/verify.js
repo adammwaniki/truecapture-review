@@ -5,6 +5,7 @@
 // headline plus the two explicit lines (Signature / Signer).
 import { verifyByUpload, verifyByHash } from '../lib/verify-client.js';
 import { toCombinedModel } from '../lib/render-model.js';
+import { readInBrowser } from './c2pa-read.js';
 
 // Backend base URL. When the page is served from localhost (local dev) we target
 // the local backend on :3000 by default, so verifying works without editing this
@@ -77,14 +78,26 @@ function renderResult(result) {
   }
 }
 
-// Upload + combined check (signature + DeDi) in one server call.
+// Combined check. A fast IN-BROWSER read shows the signature/content result
+// immediately (no upload); in parallel the file is uploaded so the server can
+// run the authoritative check including the DeDi key binding (which the browser
+// can't do). The server result is final and wins any race with the preview.
 async function verifyFile(file) {
   showSection('verifying-section');
   updateStatus('Checking the signature and DeDi registry…');
+  let serverDone = false;
+
+  // Instant, no-upload preview of the signature axis (best-effort).
+  readInBrowser(file)
+    .then((read) => { if (!serverDone) renderResult({ signature: read.signature, signer: 'pending' }); })
+    .catch(() => {}); // reader unavailable → just wait for the server
+
   try {
-    renderResult(await verifyByUpload(doFetch, BACKEND_URL, file));
+    const result = await verifyByUpload(doFetch, BACKEND_URL, file);
+    serverDone = true;
+    renderResult(result);
   } catch (err) {
-    // Network/CORS failure reaching the backend — surface it for debugging.
+    serverDone = true;
     console.error(`[verify] could not reach ${BACKEND_URL}/verify:`, err);
     renderResult({ verdict: 'unknown' });
   }
