@@ -4,7 +4,7 @@
 // can emit (kept in sync with src/verify/verdict.js).
 export const JOURNEYS = [
   { id: 'sign-photo', desc: 'sign a photo through the backend → download signed file', verdict: null, spec: 'fullstack.spec.js' },
-  { id: 'verify-authentic', desc: 'sign → verify page in-browser read → confirm → authentic', verdict: 'authentic', spec: 'fullstack.spec.js' },
+  { id: 'verify-authentic', desc: 'sign → verify page upload → combined check → authentic', verdict: 'authentic', spec: 'fullstack.spec.js' },
   { id: 'verify-tampered', desc: 'verify a file with modified content', verdict: 'tampered', spec: 'verify-route.test.js' },
   { id: 'verify-invalid', desc: 'verify a file whose signature is invalid but content untampered', verdict: 'invalid', spec: 'verify.test.js' },
   { id: 'verify-unsigned', desc: 'verify a file with no C2PA manifest', verdict: 'unsigned', spec: 'verify-route.test.js' },

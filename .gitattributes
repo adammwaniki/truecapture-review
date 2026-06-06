@@ -1,3 +1,0 @@
-# Vendored c2pa-web WASM is a committed binary build artifact (regenerate with
-# `cd verify && npm run vendor`). Not Git LFS — GitHub forks can't host LFS objects.
-verify/vendor/c2pa_bg.wasm binary

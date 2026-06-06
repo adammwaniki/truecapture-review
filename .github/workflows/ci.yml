@@ -49,10 +49,4 @@ jobs:
           node-version: 22
       - run: npm ci --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
-      # Build the vendored c2pa-web bundle + WASM from node_modules so the H2
-      # in-browser tests run here (instead of skipping). Regenerated, so CI does
-      # not need to pull the Git LFS object.
-      - name: Build verify vendor (H2 in-browser reader)
-        working-directory: verify
-        run: npm ci --no-audit --no-fund && npm run vendor
       - run: npm run test:e2e
