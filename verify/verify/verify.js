@@ -6,7 +6,12 @@
 import { verifyByUpload, verifyByHash } from '../lib/verify-client.js';
 import { toCombinedModel } from '../lib/render-model.js';
 
-const BACKEND_URL = window.TRUECAPTURE_BACKEND || 'https://api.truecapture.global';
+// Backend base URL. When the page is served from localhost (local dev) we target
+// the local backend on :3000 by default, so verifying works without editing this
+// file. Override with window.TRUECAPTURE_BACKEND. In production it's the API domain.
+const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+const BACKEND_URL = window.TRUECAPTURE_BACKEND
+  || (isLocalhost ? `${location.protocol}//${location.hostname}:3000` : 'https://api.truecapture.global');
 const doFetch = (url, opts) => fetch(url, opts);
 
 const ICONS = {
@@ -78,7 +83,9 @@ async function verifyFile(file) {
   updateStatus('Checking the signature and DeDi registry…');
   try {
     renderResult(await verifyByUpload(doFetch, BACKEND_URL, file));
-  } catch {
+  } catch (err) {
+    // Network/CORS failure reaching the backend — surface it for debugging.
+    console.error(`[verify] could not reach ${BACKEND_URL}/verify:`, err);
     renderResult({ verdict: 'unknown' });
   }
 }

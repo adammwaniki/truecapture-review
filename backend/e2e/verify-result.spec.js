@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 // renders whatever the server returns — no in-browser read, no Confirm step.
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'verify');
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
-const BACKEND = 'https://api.truecapture.global';
+const BACKEND = 'http://127.0.0.1:3000'; // the page auto-targets the local backend when served from 127.0.0.1
 const TINY = Buffer.from([0xff, 0xd8, 0xff, 0xd9]); // content irrelevant — the server is mocked
 
 let server;

@@ -9,7 +9,7 @@ import sharp from 'sharp';
 // never the raw user-agent. Drives the real /sign page in headless Chromium.
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'verify');
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
-const BACKEND = 'https://api.truecapture.global';
+const BACKEND = 'http://127.0.0.1:3000'; // the page auto-targets the local backend when served from 127.0.0.1
 
 let server;
 let origin;
