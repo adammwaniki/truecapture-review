@@ -95,24 +95,22 @@
 
       <!-- Result -->
       <div id="result-section" class="hidden">
-        <!-- Verdict banner -->
+        <!-- Headline banner -->
         <div class="verdict" id="verdict-banner" role="status" aria-live="polite">
           <div class="verdict-icon" id="verdict-icon"></div>
           <div class="verdict-text">
             <h2 id="verdict-title"></h2>
-            <p id="verdict-desc"></p>
           </div>
         </div>
 
-        <!-- Explicit, user-initiated server check (uploads the file) for the
-             forgery-proof signer-vs-DeDi verdict. Hidden until the in-browser
-             read finds a signed/intact file (or can't read it locally). -->
-        <div id="confirm-block" style="display:none">
-          <button class="confirm-signer" id="btn-confirm-signer">Confirm signer on DeDi.global</button>
-          <p class="confirm-hint">Sends your file to TrueCapture to check the signer's key against the public <a href="https://dedi.global" target="_blank" rel="noopener">DeDi.global</a> registry.</p>
+        <!-- The two explicit checks: signature + signer. -->
+        <div class="manifest-details" id="verify-details">
+          <h3>Checks</h3>
+          <div class="check-row"><span class="check-label">Signature</span><span class="check-value" id="sig-status"></span></div>
+          <div class="check-row" id="signer-row"><span class="check-label">Signer</span><span class="check-value" id="signer-status"></span></div>
         </div>
 
-        <!-- DeDi key registry (populated by the server verdict) -->
+        <!-- DeDi key registry (populated when the signer record carries an org) -->
         <div class="manifest-details" id="dedi-section" style="display:none"></div>
 
         <button class="verify-another" id="btn-verify-another">Verify Another File</button>
@@ -120,7 +118,7 @@
     </main>
 
     <footer>
-      <p>Your file is read <strong>in your browser</strong> to check it is intact and signed — it is <strong>not uploaded</strong>. Confirming the signer against the <a href="https://dedi.global" target="_blank" rel="noopener">DeDi.global</a> registry is an optional step that sends the file to TrueCapture for that check. Built on the <a href="https://c2pa.org" target="_blank" rel="noopener">C2PA</a> content-provenance standard.</p>
+      <p>To verify, your file is sent to TrueCapture, which checks its <a href="https://c2pa.org" target="_blank" rel="noopener">C2PA</a> signature and confirms the signer against the <a href="https://dedi.global" target="_blank" rel="noopener">DeDi.global</a> public registry — in one step. We keep only the verify hash, never the file. (Apps that sign on-device — the mobile SDK and Chrome extension — never upload your media.)</p>
       <p style="margin-top:8px"><a href="https://www.truecapture.global">Learn more about TrueCapture →</a></p>
     </footer>
   </div>

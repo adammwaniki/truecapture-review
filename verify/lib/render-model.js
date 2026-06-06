@@ -1,45 +1,62 @@
 import { httpsUrlOrNull } from './safe-url.js';
 
-// Maps a backend verify result to a pure display model. Drives the verify UI
-// from the REAL verdict (no hardcoded "authentic") and renders the DeDi entity
-// link only when it is a safe https URL (M3).
-const VERDICTS = {
-  authentic: { icon: 'check', title: 'Authentic', tone: 'success' },
-  tampered: { icon: 'cross', title: 'Tampered', tone: 'error' },
-  invalid: { icon: 'cross', title: 'Invalid signature', tone: 'error' },
-  forged: { icon: 'cross', title: 'Forged', tone: 'error' },
-  untrusted: { icon: 'warn', title: 'Untrusted signer', tone: 'warning' },
-  unsigned: { icon: 'info', title: 'Not signed', tone: 'neutral' },
-  unknown: { icon: 'info', title: 'Unknown', tone: 'neutral' },
+// Maps the backend's two-axis verify result { signature, signer, verdict, entity }
+// to a display model: a plain-language headline, a banner verdict class + icon,
+// and the two explicit lines (Signature + Signer). Drives the UI from the REAL
+// result (no hardcoded "authentic"); the DeDi entity link is rendered only when
+// it is a safe https URL (M3).
+
+const SIGNATURE_LABEL = {
+  valid: 'Valid — content is intact since it was signed',
+  modified: 'Content has changed since it was signed',
+  invalid: 'Present, but could not be validated',
+  none: 'No C2PA signature found',
 };
 
-export function toDisplayModel(result) {
-  const verdict = (result && result.verdict) || 'unknown';
-  const meta = VERDICTS[verdict] || VERDICTS.unknown;
-  const entity = (result && result.entity) || null;
+const SIGNER_LABEL = {
+  verified: 'Verified — key matches the organisation registered on DeDi.global',
+  unregistered: 'Not registered on DeDi.global',
+  revoked: 'Registered, but the key is revoked on DeDi.global',
+  mismatch: 'Does NOT match the organisation registered on DeDi.global',
+  none: null,
+};
+
+export function toCombinedModel(result) {
+  const r = result || {};
+  if (r.verdict === 'unknown' || (!r.signature && !r.verdict)) {
+    return { verdict: 'unknown', icon: 'info', headline: "Couldn't verify this file", signatureLabel: null, signerLabel: null, entityName: null, entityUrl: null };
+  }
+
+  const signature = r.signature || 'none';
+  const signer = r.signer || 'none';
+  const entity = r.entity || null;
+
+  let verdict;
+  let icon;
+  let headline;
+  if (signature === 'none') {
+    verdict = 'unsigned'; icon = 'info'; headline = 'Not signed';
+  } else if (signature === 'modified') {
+    verdict = 'tampered'; icon = 'cross'; headline = 'Content modified since signing';
+  } else if (signature === 'invalid') {
+    verdict = 'invalid'; icon = 'cross'; headline = 'Signature could not be validated';
+  } else if (signer === 'verified') {
+    verdict = 'authentic'; icon = 'check'; headline = 'Authentic';
+  } else if (signer === 'mismatch') {
+    verdict = 'forged'; icon = 'cross'; headline = "Forged — signer's key doesn't match DeDi";
+  } else if (signer === 'revoked') {
+    verdict = 'untrusted'; icon = 'warn'; headline = "Valid signature — signer's key is revoked on DeDi";
+  } else {
+    verdict = 'untrusted'; icon = 'warn'; headline = 'Valid signature — signer not registered on DeDi';
+  }
+
   return {
     verdict,
-    icon: meta.icon,
-    title: meta.title,
-    tone: meta.tone,
+    icon,
+    headline,
+    signatureLabel: SIGNATURE_LABEL[signature] || SIGNATURE_LABEL.none,
+    signerLabel: signature === 'none' ? null : SIGNER_LABEL[signer] || null,
     entityName: (entity && entity.name) || null,
     entityUrl: httpsUrlOrNull(entity && entity.url),
   };
-}
-
-// Maps an in-browser c2pa-web read (no upload) to a display model for the
-// public verify path (H2). The browser can prove content integrity + that the
-// file is signed, but NOT that the signer is genuine — the forgery-proof key
-// check vs DeDi is an explicit server step (canConfirm drives that button).
-export function toBrowserModel(read) {
-  if (!read || read.error) {
-    return { verdict: 'unknown', icon: 'info', title: "Couldn't read in your browser", tone: 'neutral', canConfirm: true };
-  }
-  if (!read.hasManifest) {
-    return { verdict: 'unsigned', icon: 'info', title: 'Not signed', tone: 'neutral', canConfirm: false };
-  }
-  if (read.state === 'Invalid') {
-    return { verdict: 'tampered', icon: 'cross', title: 'Content modified', tone: 'error', canConfirm: false };
-  }
-  return { verdict: 'signed', icon: 'check', title: 'Content intact · signed', tone: 'success', canConfirm: true };
 }

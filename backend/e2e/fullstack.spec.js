@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import http from 'node:http';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { readFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, extname, dirname } from 'node:path';
@@ -12,14 +12,13 @@ import { createMemoryStore } from '../src/store/memory.js';
 import { systemClock } from '../src/clock.js';
 import { createApp } from '../src/app.js';
 
-// The full-stack journey the review (L-1) flagged as missing: a REAL backend and
-// the REAL verify page together. Signs a file through the live /sign endpoint,
-// drives the verify page's in-browser read, then confirms against the live
-// backend (real c2pa read + cert extraction + DeDi key compare → authentic).
+// The full-stack journey: the REAL backend + the REAL verify page together.
+// Signs a file through the live /sign endpoint, then drops it on the verify page,
+// which uploads it for the single combined check (real c2pa read + cert
+// extraction + DeDi key compare) and renders the 2-axis result → Authentic.
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..', '..', 'verify');
-const VENDOR = join(ROOT, 'vendor');
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.wasm': 'application/wasm', '.svg': 'image/svg+xml', '.map': 'application/json' };
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
 
 let backend;
 let backendOrigin;
@@ -28,7 +27,6 @@ let webOrigin;
 let signedJpeg;
 
 test.beforeAll(async () => {
-  if (!existsSync(join(VENDOR, 'c2pa-web.js'))) return; // needs the in-browser reader
   const keysDir = join(await mkdtemp(join(tmpdir(), 'fs-k-')), 'k');
   const keys = ensureChain(keysDir);
   const leafPem = readFileSync(join(keysDir, 'leaf.crt'), 'utf8');
@@ -51,7 +49,6 @@ test.beforeAll(async () => {
   const signRes = await fetch(`${backendOrigin}/sign`, { method: 'POST', body: fd });
   signedJpeg = Buffer.from(await signRes.arrayBuffer());
 
-  // Serve the real verify site.
   web = http.createServer(async (req, res) => {
     try {
       const { pathname } = new URL(req.url, 'http://x');
@@ -70,17 +67,14 @@ test.afterAll(async () => {
   if (web) web.close();
 });
 
-test('full stack: live sign → verify page in-browser read → confirm → authentic (L-1)', async ({ page }) => {
-  test.skip(!signedJpeg, 'vendored c2pa-web not built — run: cd verify && npm run vendor');
+test('full stack: live sign → verify page upload → combined check → authentic (L-1)', async ({ page }) => {
   await page.addInitScript((origin) => { window.TRUECAPTURE_BACKEND = origin; }, backendOrigin);
   await page.goto(`${webOrigin}/verify/index.html`);
   await page.setInputFiles('#file-input', { name: 'signed.jpg', mimeType: 'image/jpeg', buffer: signedJpeg });
 
-  // In-browser read (no upload) of a genuinely-signed, intact file.
-  await expect(page.locator('#verdict-title')).toHaveText('Content intact · signed', { timeout: 20000 });
-
-  // Confirm → live POST /verify → real c2pa read + extract-cert + DeDi key compare.
-  await page.click('#btn-confirm-signer');
+  // One upload → live /verify (real c2pa read + extract-cert + DeDi key compare).
   await expect(page.locator('#verdict-title')).toHaveText('Authentic', { timeout: 20000 });
+  await expect(page.locator('#sig-status')).toContainText('Valid');
+  await expect(page.locator('#signer-status')).toContainText('Verified');
   await expect(page.locator('#dedi-section')).toContainText('TrueCapture');
 });
