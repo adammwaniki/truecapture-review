@@ -67,7 +67,7 @@ Contact [tanushka@cdpi.dev](mailto:tanushka@cdpi.dev) to discuss integration.
 
 4. **Share** — the journalist pastes the verify URL (`truecapture.global/verify/<hash>`) into their post caption or article. Readers tap it for an instant verdict.
 
-5. **Verify** — opening a file on the verify page reads it **in your browser** to check it is intact and signed (no upload). Confirming that the signer is the claimed organisation is an explicit step that re-checks the signer's key against the DeDi registry on the backend. A shared verify link (`/verify/<hash>`) is checked server-side. The verdict is **DeDi-anchored** — `authentic`, `forged`, `untrusted`, `tampered`, or `unsigned` — see [TRUST_MODEL.md](./TRUST_MODEL.md).
+5. **Verify** — drop a file on the verify page (or open a shared `/verify/<hash>` link) and the backend runs **both checks at once** — the C2PA **signature** and the **DeDi signer registration** — returning a result on two axes (signature: valid / modified / invalid / none; signer: verified / unregistered / revoked / mismatch) plus a roll-up verdict. The verdict is **DeDi-anchored** — see [TRUST_MODEL.md](./TRUST_MODEL.md).
 
 ### C2PA compliance
 
@@ -134,7 +134,7 @@ All endpoints are served by the **backend** (Fastify) at its base URL — `http:
 - **Trust** — DeDi-anchored verdict (signer key compared to the [DeDi.global](https://dedi.global) record); see [TRUST_MODEL.md](./TRUST_MODEL.md)
 - **Storage** — SQLite (`node:sqlite`) for verify-hash records (durable, with retention)
 - **Frontend** — plain HTML, CSS, JavaScript — no build step, no framework
-- **Verify crypto** — in-browser C2PA read via [`@contentauth/c2pa-web`](https://opensource.contentauthenticity.org/) (WASM) for content integrity with **no upload**; the forgery-proof key-binding is confirmed server-side
+- **Verify** — the backend re-checks the C2PA signature/content and binds the signer's key to the DeDi-published key in one call (`POST /verify`); the static verify page uploads the file and renders the two-axis result
 - **Deployment** — [Railway](https://railway.app)
 
 ---
@@ -192,10 +192,9 @@ The static clients default to the **production** backend, so for local you must 
    ```bash
    cd verify
    npm install
-   npm run vendor        # builds the in-browser C2PA reader (c2pa-web bundle + WASM)
    npm start             # http://localhost:8080
    ```
-4. Open `http://localhost:8080/verify`, drop `signed.jpg` → **"Content intact · signed"** (read in your browser, no upload) → click **Confirm signer with DeDi** for the server verdict.
+4. Open `http://localhost:8080/verify` and drop `signed.jpg` → it's uploaded to the backend, which runs the combined check and shows the result: a headline plus two lines (**Signature** and **Signer**).
 
 > The **sign page on desktop** shows a "use the extension" message (live capture is mobile/extension). On desktop, create signed files via `curl` (step 2) or the extension.
 
@@ -260,10 +259,10 @@ Create a DeDi account → namespace → registry → key record, and set the thr
 The static clients default to `https://api.truecapture.global`. Set `BACKEND_URL` in `verify/verify/verify.js` and `verify/sign/index.html` to your backend domain. Then:
 
 ```bash
-cd verify && npm ci && npm run vendor && npm start
+cd verify && npm ci && npm start
 ```
 
-`npm run vendor` (the c2pa-web bundle + WASM for in-browser verification) **must run at build time**. Any static host works — serve `verify/` with the SPA rewrites in `verify/serve.json`.
+The verify site is plain static HTML/JS (no build step) — any static host works; serve `verify/` with the SPA rewrites in `verify/serve.json`.
 
 ### 5. Chrome extension (optional)
 
