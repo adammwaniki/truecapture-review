@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { generateKeyPairSync, X509Certificate } from 'node:crypto';
 import { extractDediRef } from './dedi-ref.js';
-import { verdictFor, isContentTampered } from './verdict.js';
+import { signatureStatus, signerStatus, combinedVerdict, isContentTampered } from './verdict.js';
 import { publicKeysEqual, toSpkiB64 } from './keymatch.js';
 
 const storeWith = (assertions) => ({ active_manifest: 'm', manifests: { m: { assertions } } });
@@ -26,16 +26,28 @@ describe('extractDediRef', () => {
   });
 });
 
-describe('verdictFor', () => {
-  const base = { hasManifest: true, validationState: 'Valid', hasRef: true, record: { state: 'live' }, keyMatches: true };
-  it('unsigned when no manifest', () => expect(verdictFor({ ...base, hasManifest: false })).toBe('unsigned'));
-  it('tampered when invalid due to a content-hash mismatch', () => expect(verdictFor({ ...base, validationState: 'Invalid', contentTampered: true })).toBe('tampered'));
-  it('invalid when not Valid but not content-tampered (e.g. broken signature)', () => expect(verdictFor({ ...base, validationState: 'Invalid', contentTampered: false })).toBe('invalid'));
-  it('untrusted when no dedi reference', () => expect(verdictFor({ ...base, hasRef: false })).toBe('untrusted'));
-  it('untrusted when record missing', () => expect(verdictFor({ ...base, record: null })).toBe('untrusted'));
-  it('untrusted when record not live', () => expect(verdictFor({ ...base, record: { state: 'revoked' } })).toBe('untrusted'));
-  it('forged when key does not match', () => expect(verdictFor({ ...base, keyMatches: false })).toBe('forged'));
-  it('authentic when live and key matches', () => expect(verdictFor(base)).toBe('authentic'));
+describe('signatureStatus', () => {
+  it('valid when validation_state is Valid', () => expect(signatureStatus({ validationState: 'Valid' })).toBe('valid'));
+  it('modified on a content-hash mismatch', () => expect(signatureStatus({ validationState: 'Invalid', validationStatus: [{ code: 'assertion.hashedURI.mismatch' }] })).toBe('modified'));
+  it('invalid when not Valid and not a content-hash mismatch', () => expect(signatureStatus({ validationState: 'Invalid', validationStatus: [{ code: 'claimSignature.mismatch' }] })).toBe('invalid'));
+});
+
+describe('signerStatus', () => {
+  it('unregistered with no dedi reference', () => expect(signerStatus({ hasRef: false, record: null, keyMatches: () => true })).toBe('unregistered'));
+  it('unregistered when the record is missing', () => expect(signerStatus({ hasRef: true, record: null, keyMatches: () => true })).toBe('unregistered'));
+  it('revoked when the record is not live', () => expect(signerStatus({ hasRef: true, record: { state: 'revoked' }, keyMatches: () => true })).toBe('revoked'));
+  it('verified when live and the key matches', () => expect(signerStatus({ hasRef: true, record: { state: 'live' }, keyMatches: () => true })).toBe('verified'));
+  it('mismatch when live but the key differs', () => expect(signerStatus({ hasRef: true, record: { state: 'live' }, keyMatches: () => false })).toBe('mismatch'));
+});
+
+describe('combinedVerdict (matrix → roll-up)', () => {
+  it('unsigned', () => expect(combinedVerdict('none', 'none')).toBe('unsigned'));
+  it('tampered (content modified)', () => expect(combinedVerdict('modified', 'verified')).toBe('tampered'));
+  it('invalid (broken signature)', () => expect(combinedVerdict('invalid', 'verified')).toBe('invalid'));
+  it('authentic (valid + verified)', () => expect(combinedVerdict('valid', 'verified')).toBe('authentic'));
+  it('forged (valid + key mismatch)', () => expect(combinedVerdict('valid', 'mismatch')).toBe('forged'));
+  it('untrusted (valid + unregistered)', () => expect(combinedVerdict('valid', 'unregistered')).toBe('untrusted'));
+  it('untrusted (valid + revoked)', () => expect(combinedVerdict('valid', 'revoked')).toBe('untrusted'));
 });
 
 describe('isContentTampered', () => {

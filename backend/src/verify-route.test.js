@@ -66,12 +66,14 @@ async function verify(buf) {
 
 describe('POST /verify (forgery-proof, C1)', () => {
   it('authentic: org-signed asset whose key matches the live DeDi record', async () => {
-    expect((await verify(await sign(orgC2pa, 'org-rec'))).verdict).toBe('authentic');
+    const r = await verify(await sign(orgC2pa, 'org-rec'));
+    expect(r).toMatchObject({ verdict: 'authentic', signature: 'valid', signer: 'verified' });
   });
 
   it('forged: attacker key + copied dedi_record_id → NOT authentic', async () => {
     // The headline adversarial case from the architectural review.
-    expect((await verify(await sign(attackerC2pa, 'org-rec'))).verdict).toBe('forged');
+    const r = await verify(await sign(attackerC2pa, 'org-rec'));
+    expect(r).toMatchObject({ verdict: 'forged', signature: 'valid', signer: 'mismatch' });
   });
 
   it('tampered: a modified signed asset', async () => {
