@@ -179,22 +179,26 @@ Flip a byte in `signed.jpg` → `tampered`; an unsigned file → `unsigned`.
 
 ### 3. Run the full UI (verify + sign pages)
 
-The static clients default to the **production** backend, so for local you must point them at `localhost` **and** enable CORS for the verify origin.
+The pages need to know your backend's URL, and the backend must allow the verify origin (CORS). Served from `localhost`, the pages **auto-target `http://localhost:3000`**, so no config is needed for the default local setup.
 
-1. **Point the clients at your local backend:**
-   - `verify/verify/verify.js` (top): `const BACKEND_URL = window.TRUECAPTURE_BACKEND || 'http://localhost:3000';`
-   - `verify/sign/index.html` (inline `<script>` near the top): `const BACKEND_URL = 'http://localhost:3000';`
-2. **Start the backend allowing the verify origin** (CORS is off by default):
+1. **Start the backend allowing the verify origin** (CORS is off by default):
    ```bash
    cd backend && CORS_ORIGINS=http://localhost:8080 node server.js
    ```
-3. **Serve the verify site:**
+2. **Serve the verify site:**
    ```bash
    cd verify
    npm install
    npm start             # http://localhost:8080
    ```
-4. Open `http://localhost:8080/verify` and drop `signed.jpg` → it's uploaded to the backend, which runs the combined check and shows the result: a headline plus two lines (**Signature** and **Signer**).
+3. Open `http://localhost:8080/verify` and drop `signed.jpg` → it's uploaded to the backend, which runs the combined check and shows the result: a headline plus two lines (**Signature** and **Signer**).
+
+**Pointing at a different backend.** The single config point is **[`verify/config.js`](verify/config.js)** — a plain script served with the site (no build step). Set it to override the auto-detect:
+```js
+// verify/config.js
+window.TRUECAPTURE_BACKEND = 'http://localhost:3000'; // or your deployed backend
+```
+Leave it blank to use the auto-detect (localhost in dev, the production API otherwise).
 
 > The **sign page on desktop** shows a "use the extension" message (live capture is mobile/extension). On desktop, create signed files via `curl` (step 2) or the extension.
 
@@ -254,11 +258,12 @@ On first boot the backend generates an EC P-256 CA→leaf chain in `backend/.key
 
 Create a DeDi account → namespace → registry → key record, and set the three `DEDI_*` vars. The backend publishes the leaf certificate on boot so any verifier can bind signatures to your org (see [TRUST_MODEL.md](./TRUST_MODEL.md)). **Without this, verdicts cap at `untrusted`.**
 
-### 4. Point the clients at your backend, then build + serve the site
+### 4. Point the clients at your backend, then serve the site
 
-The static clients default to `https://api.truecapture.global`. Set `BACKEND_URL` in `verify/verify/verify.js` and `verify/sign/index.html` to your backend domain. Then:
+Set your backend URL in **`verify/config.js`** (the single config point — `window.TRUECAPTURE_BACKEND = 'https://api.yourdomain.com'`), or generate it from an env var at deploy:
 
 ```bash
+echo "window.TRUECAPTURE_BACKEND='${VERIFY_BACKEND_URL}';" > verify/config.js
 cd verify && npm ci && npm start
 ```
 

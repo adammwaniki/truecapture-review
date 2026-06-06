@@ -626,11 +626,14 @@ footer a { color: #6366f1; text-decoration: none; }
   </div>
 </div>
 
+<script src="/config.js"></script>
 <script>
-// Local dev (served from localhost) targets the local backend on :3000 by default.
-const BACKEND_URL = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-  ? `${location.protocol}//${location.hostname}:3000`
-  : 'https://api.truecapture.global';
+// Backend base URL: config.js (window.TRUECAPTURE_BACKEND) wins; otherwise auto-
+// detect — local backend on :3000 when served from localhost, else the API domain.
+const BACKEND_URL = window.TRUECAPTURE_BACKEND
+  || ((location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+    ? `${location.protocol}//${location.hostname}:3000`
+    : 'https://api.truecapture.global');
 
 const isIOS     = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 const isAndroid = /Android/i.test(navigator.userAgent);
