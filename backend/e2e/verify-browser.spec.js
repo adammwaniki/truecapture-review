@@ -21,11 +21,13 @@ let server;
 let origin;
 let signedJpeg;
 let tamperedJpeg;
+let unsignedJpeg;
 
 test.beforeAll(async () => {
   if (!existsSync(join(VENDOR, 'c2pa-web.js'))) return; // run: cd verify && npm run vendor
   const keys = ensureChain(join(await mkdtemp(join(tmpdir(), 'k-')), 'k'));
   const jpeg = await sharp({ create: { width: 32, height: 32, channels: 3, background: { r: 9, g: 9, b: 9 } } }).jpeg().toBuffer();
+  unsignedJpeg = jpeg; // a plain photo that was never signed
   signedJpeg = await createC2pa(keys).sign(jpeg, 'image/jpeg', {
     claim_generator_info: [{ name: 'TrueCapture' }],
     assertions: [
@@ -89,6 +91,23 @@ test('tampered file: in-browser read says "Content modified", no confirm, no upl
   await page.setInputFiles('#file-input', { name: 't.jpg', mimeType: 'image/jpeg', buffer: tamperedJpeg });
 
   await expect(page.locator('#verdict-title')).toHaveText('Content modified', { timeout: 20000 });
+  await expect(page.locator('#btn-confirm-signer')).toBeHidden();
+  expect(posts).toBe(0);
+});
+
+test('unsigned file: in-browser read says "Not signed" (NOT "couldn\'t read"), no confirm, no upload', async ({ page }) => {
+  test.skip(!origin, 'vendored c2pa-web not built');
+  let posts = 0;
+  await page.route(`${BACKEND}/**`, (route) => {
+    if (route.request().method() === 'POST') posts += 1;
+    route.fulfill({ json: { verdict: 'unsigned' } });
+  });
+  await page.goto(`${origin}/verify/index.html`);
+  await page.setInputFiles('#file-input', { name: 'plain.jpg', mimeType: 'image/jpeg', buffer: unsignedJpeg });
+
+  // A plain photo with no C2PA manifest must read cleanly as "Not signed" —
+  // fromBlob() returns null, which must not be mistaken for a read failure.
+  await expect(page.locator('#verdict-title')).toHaveText('Not signed', { timeout: 20000 });
   await expect(page.locator('#btn-confirm-signer')).toBeHidden();
   expect(posts).toBe(0);
 });

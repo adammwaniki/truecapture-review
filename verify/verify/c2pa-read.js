@@ -16,11 +16,15 @@ function getC2pa() {
   return _c2paPromise;
 }
 
-// Reads a File/Blob locally. Returns { hasManifest, state, issuer } — never throws
-// for an unsigned file; callers handle a thrown error as "couldn't read in browser".
+// Reads a File/Blob locally. Returns { hasManifest, state, issuer }. For a file
+// with no C2PA manifest (any ordinary photo/video), c2pa-web's fromBlob() returns
+// null — that's "not signed", NOT a read failure, so we must not call
+// manifestStore() on it. A genuine error (unparseable/unsupported) still throws,
+// and the caller surfaces it as "couldn't read in browser".
 export async function readInBrowser(file) {
   const c2pa = await getC2pa();
   const reader = await c2pa.reader.fromBlob(file.type || 'image/jpeg', file);
+  if (!reader) return { hasManifest: false }; // no manifest → not signed
   const store = await reader.manifestStore();
   if (!store || !store.active_manifest) return { hasManifest: false };
   const m = store.manifests[store.active_manifest] || {};
