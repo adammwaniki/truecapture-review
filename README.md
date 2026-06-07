@@ -257,6 +257,18 @@ The key publishes on the next boot; verify then returns `authentic`. See [TRUST_
 
 ## Run with Docker
 
+### Prerequisites
+
+- **Docker Engine 20.10+** and the **Compose v2** plugin (`docker compose`, not the legacy `docker-compose`). Check with `docker --version` and `docker compose version`.
+- **Compose v2.24+** for the optional `.env` (`required: false`) syntax used here. On an older Compose, either upgrade or create a `.env` (`cp .env.example .env`) so the file exists.
+- **Run without `sudo`** — add your user to the `docker` group once, then start a new login session:
+  ```bash
+  sudo usermod -aG docker "$USER"   # then log out/in (or run: newgrp docker)
+  ```
+  (Alternatively, use [rootless Docker](https://docs.docker.com/engine/security/rootless/).) Without this you'll need to prefix the commands below with `sudo`.
+
+### One command
+
 The whole stack — backend API + the static verify/sign site — runs with one command via [`docker-compose.yml`](docker-compose.yml):
 
 ```bash
