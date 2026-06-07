@@ -255,6 +255,46 @@ The key publishes on the next boot; verify then returns `authentic`. See [TRUST_
 
 ---
 
+## Run with Docker
+
+The whole stack — backend API + the static verify/sign site — runs with one command via [`docker-compose.yml`](docker-compose.yml):
+
+```bash
+docker compose up --build
+```
+
+- **Verify/sign site** → http://localhost:8080
+- **Backend API** → http://localhost:3000 (Swagger at `/docs`)
+
+This boots a working **local** stack with zero config: CORS is pre-set to the site origin and the site is pointed at the backend automatically. `ffmpeg` (for WebM→MP4) and `openssl` (for the signing chain) are inside the backend image — nothing to install.
+
+**Two images, both built here:**
+
+| Service | Image | Base | Notes |
+|---------|-------|------|-------|
+| `backend` | `backend/Dockerfile` | `node:22-bookworm-slim` | glibc base for the native deps (sharp, c2pa-node) + bundled `ffmpeg-static`; `openssl` for the signing chain. Runs as non-root, with a `/health` healthcheck. |
+| `verify` | `verify/Dockerfile` | `nginx:1.27-alpine` | serves the static site; `serve.json` routing → `nginx.conf`; `config.js` is written from `VERIFY_BACKEND_URL` at start. |
+
+**Persistence.** The signing identity (EC chain) **and** the share-link store live in `/app/.keys`, kept in the named volume `truecapture-keys`. **Don't delete it** — losing the chain changes your signer identity. (`docker compose down` keeps it; `down -v` wipes it.)
+
+**Configuration.**
+
+- Create `.env` (from [`.env.example`](.env.example)) for real config — `DEDI_*` for `authentic` verdicts, `CAPTCHA_*`, `OIDC_*`, etc. It's read into the backend automatically (optional; the stack boots without it).
+- Useful overrides (env or shell):
+  - `BACKEND_PORT` / `VERIFY_PORT` — host ports (default `3000` / `8080`) if those clash. If you change `BACKEND_PORT`, set `VERIFY_BACKEND_URL=http://localhost:<port>` so the browser targets it.
+  - `CORS_ORIGINS` — defaults to `http://localhost:8080`; set to your site origin(s) (comma-separated).
+  - `VERIFY_BACKEND_URL` — the backend URL the **browser** calls (default `http://localhost:3000`); set to your API domain in prod.
+
+```bash
+# Example: avoid a port clash and point the site at the moved backend
+BACKEND_PORT=13000 VERIFY_BACKEND_URL=http://localhost:13000 \
+CORS_ORIGINS=http://localhost:8080 docker compose up --build
+```
+
+For a real deployment, put both services behind TLS, set `VERIFY_BACKEND_URL`/`CORS_ORIGINS` to your domains, and follow the hardening checklist below.
+
+---
+
 ## Run it in prod
 
 TrueCapture runs as **two services** — a Node backend (signing + verification) and the static verify/sign site. The reference deployment uses Railway, but any Node 22.5+ host plus a static host works.

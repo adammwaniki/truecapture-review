@@ -56,7 +56,9 @@ export async function start(env = process.env) {
     ? createOidcVerifier({ issuer: cfg.oidc.issuer, audience: cfg.oidc.audience, jwks: createRemoteJWKSet(new URL(cfg.oidc.jwksUri)) })
     : { verify: async () => null }; // not configured → /sign/session returns 401
 
-  const store = createSqliteStore(join(keysDir, '..', 'records.db'));
+  // Keep the share-link store alongside the signing chain so a single persisted
+  // directory (.keys — a Docker volume in containerised deploys) survives both.
+  const store = createSqliteStore(join(keysDir, 'records.db'));
   scheduleRetention({ store, retentionMs: cfg.retentionMs }); // H-3 (no-op when disabled)
 
   const app = createApp({
