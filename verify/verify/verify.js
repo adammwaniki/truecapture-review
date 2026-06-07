@@ -43,7 +43,9 @@ function escapeText(value) {
   return div.innerHTML;
 }
 
-// Render the combined result: headline banner + the two explicit lines + entity.
+// Render the combined result: headline banner (+ optional subtitle), an optional
+// separate warning block (e.g. valid signature but signer not on DeDi), the two
+// explicit colour-coded lines, and the entity.
 function renderResult(result) {
   const m = toCombinedModel(result);
   showSection('result-section');
@@ -51,12 +53,34 @@ function renderResult(result) {
   $('verdict-icon').innerHTML = ICONS[m.icon] || ICONS.info;
   $('verdict-title').textContent = m.headline;
 
+  const subtitle = $('verdict-subtitle');
+  if (subtitle) {
+    subtitle.textContent = m.subtitle || '';
+    subtitle.style.display = m.subtitle ? '' : 'none';
+  }
+
+  // Separate warning block — its own colour (orange = caution, red = bad).
+  const warn = $('warning-block');
+  if (warn) {
+    if (m.warning) {
+      warn.className = 'warning-block ' + m.warning.tone;
+      $('warning-icon').innerHTML = ICONS[m.warning.icon] || ICONS.warn;
+      $('warning-title').textContent = m.warning.title;
+      $('warning-detail').textContent = m.warning.detail || '';
+      warn.style.display = '';
+    } else {
+      warn.style.display = 'none';
+    }
+  }
+
   const details = $('verify-details');
-  if (m.signatureLabel) {
+  if (m.showChecks && m.signatureLabel) {
     details.style.display = '';
     $('sig-status').textContent = m.signatureLabel;
+    $('sig-status').className = 'check-value ' + m.signatureTone;
     if (m.signerLabel) {
       $('signer-status').textContent = m.signerLabel;
+      $('signer-status').className = 'check-value ' + m.signerTone;
       $('signer-row').style.display = '';
     } else {
       $('signer-row').style.display = 'none';

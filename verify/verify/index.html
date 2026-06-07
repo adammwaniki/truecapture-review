@@ -100,6 +100,17 @@
           <div class="verdict-icon" id="verdict-icon"></div>
           <div class="verdict-text">
             <h2 id="verdict-title"></h2>
+            <p id="verdict-subtitle" style="display:none"></p>
+          </div>
+        </div>
+
+        <!-- Separate warning block — shown (with its own colour) when the signature
+             passes but the signer can't be trusted (e.g. not registered on DeDi). -->
+        <div class="warning-block" id="warning-block" role="status" aria-live="polite" style="display:none">
+          <div class="warning-icon" id="warning-icon"></div>
+          <div class="warning-text">
+            <strong class="warning-title" id="warning-title"></strong>
+            <p class="warning-detail" id="warning-detail"></p>
           </div>
         </div>
 

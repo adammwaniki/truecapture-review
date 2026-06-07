@@ -50,16 +50,23 @@ test('valid signature + verified signer → Authentic, both lines, entity', asyn
   await expect(page.locator('#verdict-banner')).toHaveClass(/authentic/);
   await expect(page.locator('#sig-status')).toContainText('Valid');
   await expect(page.locator('#signer-status')).toContainText('Verified');
+  await expect(page.locator('#warning-block')).toBeHidden(); // no warning when fully authentic
   await expect(page.locator('#dedi-section')).toContainText('BBC');
   await expect(page.locator('#dedi-section a')).toHaveAttribute('href', 'https://bbc.com/');
 });
 
-test('valid signature + UNREGISTERED signer → clear headline (the reported case), not "Not signed"', async ({ page }) => {
+test('valid signature + UNREGISTERED signer → GREEN signature pass + SEPARATE orange warning', async ({ page }) => {
   await drop(page, { signature: 'valid', signer: 'unregistered', verdict: 'untrusted', entity: null });
-  await expect(page.locator('#verdict-title')).toHaveText('Valid signature — signer not registered on DeDi');
-  await expect(page.locator('#verdict-banner')).toHaveClass(/untrusted/);
-  await expect(page.locator('#sig-status')).toContainText('Valid');
-  await expect(page.locator('#signer-status')).toContainText('Not registered');
+  // Green banner: the signature itself genuinely passed.
+  await expect(page.locator('#verdict-title')).toHaveText('Signature is valid');
+  await expect(page.locator('#verdict-banner')).toHaveClass(/signed/);
+  await expect(page.locator('#verdict-subtitle')).toContainText('intact');
+  // Separate orange warning for the untrusted signer.
+  await expect(page.locator('#warning-block')).toBeVisible();
+  await expect(page.locator('#warning-block')).toHaveClass(/warn/);
+  await expect(page.locator('#warning-block')).toContainText('Signer not registered on DeDi.global');
+  // The redundant Checks card is hidden in this layout.
+  await expect(page.locator('#verify-details')).toBeHidden();
 });
 
 test('valid signature + key mismatch → Forged, unsafe entity link stripped (M3)', async ({ page }) => {

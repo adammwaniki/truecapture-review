@@ -9,30 +9,44 @@ describe('toCombinedModel (two-axis verify result)', () => {
     expect(m.headline).toBe('Authentic');
     expect(m.signatureLabel).toMatch(/Valid/);
     expect(m.signerLabel).toMatch(/Verified/);
+    expect(m.signatureTone).toBe('good');
+    expect(m.signerTone).toBe('good');
+    expect(m.warning).toBeNull();
     expect(m.entityName).toBe('BBC');
     expect(m.entityUrl).toBe('https://bbc.com/');
   });
 
-  it('valid signature + UNREGISTERED signer → clear "not registered" headline (the reported case)', () => {
+  it('valid signature + UNREGISTERED signer → GREEN signature pass + SEPARATE orange warning (the reported case)', () => {
     const m = toCombinedModel({ signature: 'valid', signer: 'unregistered', verdict: 'untrusted', entity: null });
-    expect(m.verdict).toBe('untrusted');
-    expect(m.icon).toBe('warn');
-    expect(m.headline).toBe('Valid signature — signer not registered on DeDi');
-    expect(m.signatureLabel).toMatch(/Valid/);
-    expect(m.signerLabel).toBe('Not registered on DeDi.global');
+    // Green pass for the signature itself.
+    expect(m.verdict).toBe('signed');
+    expect(m.icon).toBe('check');
+    expect(m.headline).toBe('Signature is valid');
+    expect(m.subtitle).toMatch(/intact/);
+    // Separate orange warning for the untrusted signer.
+    expect(m.warning).toMatchObject({ tone: 'warn', title: 'Signer not registered on DeDi.global' });
+    expect(m.warning.detail).toMatch(/can't confirm/i);
+    // The banner + warning carry both axes, so the redundant Checks card is hidden.
+    expect(m.showChecks).toBe(false);
   });
 
-  it('valid signature + revoked signer', () => {
+  it('valid signature + revoked signer → green pass + orange "revoked" warning', () => {
     const m = toCombinedModel({ signature: 'valid', signer: 'revoked', verdict: 'untrusted' });
-    expect(m.headline).toMatch(/revoked/);
-    expect(m.signerLabel).toMatch(/revoked/);
+    expect(m.verdict).toBe('signed');
+    expect(m.headline).toBe('Signature is valid');
+    expect(m.warning).toMatchObject({ tone: 'warn' });
+    expect(m.warning.title).toMatch(/revoked/i);
+    expect(m.showChecks).toBe(false);
   });
 
-  it('valid signature + key mismatch → forged', () => {
+  it('valid signature + key mismatch → forged, NO green pass (stays red, warning suppressed)', () => {
     const m = toCombinedModel({ signature: 'valid', signer: 'mismatch', verdict: 'forged', entity: { name: 'X', url: 'javascript:evil()' } });
     expect(m.verdict).toBe('forged');
     expect(m.headline).toMatch(/Forged/);
+    expect(m.warning).toBeNull(); // a forged file must NOT show a reassuring green pass
+    expect(m.showChecks).toBe(true);
     expect(m.signerLabel).toMatch(/Does NOT match/);
+    expect(m.signerTone).toBe('bad');
     expect(m.entityUrl).toBeNull(); // M3: unsafe link stripped
     expect(m.entityName).toBe('X');
   });
@@ -42,7 +56,9 @@ describe('toCombinedModel (two-axis verify result)', () => {
     expect(m.verdict).toBe('tampered');
     expect(m.headline).toMatch(/modified/i);
     expect(m.signatureLabel).toMatch(/changed/);
+    expect(m.signatureTone).toBe('bad');
     expect(m.signerLabel).toMatch(/Verified/); // both axes shown
+    expect(m.signerTone).toBe('good');
   });
 
   it('invalid signature reports both axes', () => {

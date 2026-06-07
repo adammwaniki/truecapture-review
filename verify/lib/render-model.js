@@ -1,10 +1,20 @@
 import { httpsUrlOrNull } from './safe-url.js';
 
 // Maps the backend's two-axis verify result { signature, signer, verdict, entity }
-// to a display model: a plain-language headline, a banner verdict class + icon,
-// and the two explicit lines (Signature + Signer). Drives the UI from the REAL
-// result (no hardcoded "authentic"); the DeDi entity link is rendered only when
-// it is a safe https URL (M3).
+// to a display model. The two axes are presented INDEPENDENTLY so the UI can give
+// an honest, split verdict — e.g. a green "signature is valid" pass plus a SEPARATE
+// orange warning that the signer isn't registered on DeDi. Drives the UI from the
+// REAL result (no hardcoded "authentic"); the DeDi entity link is rendered only
+// when it is a safe https URL (M3).
+//
+// Model shape:
+//   verdict        banner CSS class (presentation): authentic|signed|tampered|forged|invalid|unsigned|checking|unknown
+//   icon, headline banner icon + plain-language headline
+//   subtitle       optional second line under the headline (null when none)
+//   warning        optional secondary block { tone:'warn'|'bad', icon, title, detail } (null when none)
+//   showChecks     whether to render the two-row "Checks" card (false when the banner
+//                  + warning already carry both axes, e.g. the green-pass + orange-warning case)
+//   signatureLabel/signerLabel + signatureTone/signerTone  the two "Checks" rows
 
 const SIGNATURE_LABEL = {
   valid: 'Valid — content is intact since it was signed',
@@ -21,10 +31,19 @@ const SIGNER_LABEL = {
   none: null,
 };
 
+// Per-axis colour tone for the "Checks" rows: good=green, warn=orange, bad=red.
+const SIGNATURE_TONE = { valid: 'good', modified: 'bad', invalid: 'bad', none: 'neutral' };
+const SIGNER_TONE = { verified: 'good', unregistered: 'warn', revoked: 'warn', mismatch: 'bad', none: 'neutral' };
+
 export function toCombinedModel(result) {
   const r = result || {};
   if (r.verdict === 'unknown' || (!r.signature && !r.verdict)) {
-    return { verdict: 'unknown', icon: 'info', headline: "Couldn't verify this file", signatureLabel: null, signerLabel: null, entityName: null, entityUrl: null };
+    return {
+      verdict: 'unknown', icon: 'info', headline: "Couldn't verify this file",
+      subtitle: null, warning: null, showChecks: false,
+      signatureLabel: null, signerLabel: null, signatureTone: 'neutral', signerTone: 'neutral',
+      entityName: null, entityUrl: null,
+    };
   }
 
   const signature = r.signature || 'none';
@@ -35,6 +54,10 @@ export function toCombinedModel(result) {
   let verdict;
   let icon;
   let headline;
+  let subtitle = null;
+  let warning = null;
+  let showChecks = true;
+
   if (signature === 'none') {
     verdict = 'unsigned'; icon = 'info'; headline = 'Not signed';
   } else if (signature === 'modified') {
@@ -46,19 +69,34 @@ export function toCombinedModel(result) {
   } else if (signer === 'verified') {
     verdict = 'authentic'; icon = 'check'; headline = 'Authentic';
   } else if (signer === 'mismatch') {
+    // The signature is cryptographically valid, but the signer key does NOT match
+    // the org's DeDi-published key — an active forgery. Deliberately NOT a green
+    // pass: the headline stays red so a forged file never reads as "valid".
     verdict = 'forged'; icon = 'cross'; headline = "Forged — signer's key doesn't match DeDi";
-  } else if (signer === 'revoked') {
-    verdict = 'untrusted'; icon = 'warn'; headline = "Valid signature — signer's key is revoked on DeDi";
   } else {
-    verdict = 'untrusted'; icon = 'warn'; headline = 'Valid signature — signer not registered on DeDi';
+    // Valid signature + (unregistered | revoked): the signature truly passed, and the
+    // only gap is WHO signed it. Show a GREEN signature pass + a SEPARATE orange
+    // warning for the untrusted signer (requested UX). The banner + warning carry
+    // both axes, so the "Checks" card is redundant here.
+    verdict = 'signed'; icon = 'check'; headline = 'Signature is valid';
+    subtitle = 'Content is intact since it was signed';
+    showChecks = false;
+    warning = signer === 'revoked'
+      ? { tone: 'warn', icon: 'warn', title: 'Signer key revoked on DeDi.global', detail: 'The signing key has been revoked, so the signer can no longer be trusted.' }
+      : { tone: 'warn', icon: 'warn', title: 'Signer not registered on DeDi.global', detail: "We can't confirm who signed this file." };
   }
 
   return {
     verdict,
     icon,
     headline,
+    subtitle,
+    warning,
+    showChecks,
     signatureLabel: SIGNATURE_LABEL[signature] || SIGNATURE_LABEL.none,
     signerLabel: signature === 'none' ? null : (pending ? 'Checking DeDi.global…' : SIGNER_LABEL[signer] || null),
+    signatureTone: SIGNATURE_TONE[signature] || 'neutral',
+    signerTone: pending ? 'neutral' : (SIGNER_TONE[signer] || 'neutral'),
     entityName: (entity && entity.name) || null,
     entityUrl: httpsUrlOrNull(entity && entity.url),
   };
