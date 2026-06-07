@@ -60,7 +60,7 @@ Contact [tanushka@cdpi.dev](mailto:tanushka@cdpi.dev) to discuss integration.
 
 2. **Sign** — the browser sends the file to the backend signing server (the public endpoint has **no secret key**; it is guarded by a CAPTCHA, an Origin allowlist, and a per-IP rate limit — and a separate OIDC-bound endpoint exists for authenticated users). The server:
    - Builds a standards-compliant **C2PA manifest** — a content hard-binding, a `c2pa.actions` assertion, a coarse capture device class (iOS/Android/Desktop; never the raw user-agent), and the signer's DeDi reference
-   - Signs it as **COSE_Sign1 / ES256** with the EC P-256 leaf key via [`@contentauth/c2pa-node`](https://opensource.contentauthenticity.org/) — no hand-rolled signing or custom container
+   - Signs it as **COSE_Sign1 / ES256** with the EC P-256 leaf key via [`@contentauth/c2pa-node`](https://opensource.contentauthenticity.org/) **0.5.5** — no hand-rolled signing or custom container
    - Embeds the manifest into the file per the C2PA spec, stores the verify hash **durably** (SQLite), and returns the signed file + a short verify URL
 
 3. **Register** — the signer's public key is registered on [DeDi.global](https://dedi.global), a decentralised public key directory. The manifest embeds the DeDi record ID so any verifier can independently confirm the key belongs to the claimed organisation.
@@ -77,7 +77,7 @@ TrueCapture implements the [C2PA specification](https://c2pa.org) — the same p
 
 ## Supported media formats
 
-Signing **embeds** the manifest *inside* the file plus a content hash (the C2PA "hard binding"), so the engine can only sign formats for which the C2PA spec defines an embedding **and** the engine ships a handler. TrueCapture's engine is [`@contentauth/c2pa-node`](https://github.com/contentauth/c2pa-node) (the official C2PA reference engine, Rust `c2pa-rs`); the list below is **what that engine accepts**:
+Signing **embeds** the manifest *inside* the file plus a content hash (the C2PA "hard binding"), so the engine can only sign formats for which the C2PA spec defines an embedding **and** the engine ships a handler. TrueCapture's engine is [`@contentauth/c2pa-node`](https://github.com/contentauth/c2pa-node) **0.5.5** (the official C2PA reference engine, Rust `c2pa-rs`); the in-browser preview reader is [`@contentauth/c2pa-web`](https://github.com/contentauth/c2pa-web) **0.8.3**. The list below is **what that engine version accepts** — a different engine version could change it:
 
 | Kind | Formats |
 |------|---------|
@@ -155,7 +155,7 @@ All endpoints are served by the **backend** (Fastify) at its base URL — `http:
 ## Tech stack
 
 - **Backend** — Node.js 22.5+ (uses the built-in `node:sqlite`), [Fastify](https://fastify.dev), `@fastify/multipart`, `@fastify/swagger` (OpenAPI + Swagger UI at `/docs`, spec at `/openapi.json`)
-- **Signing** — real **C2PA** (COSE_Sign1 / ES256) via [`@contentauth/c2pa-node`](https://opensource.contentauthenticity.org/) — no hand-rolled signing or custom container
+- **Signing** — real **C2PA** (COSE_Sign1 / ES256) via [`@contentauth/c2pa-node`](https://opensource.contentauthenticity.org/) **0.5.5** (in-browser preview reader: [`@contentauth/c2pa-web`](https://github.com/contentauth/c2pa-web) **0.8.3**) — no hand-rolled signing or custom container
 - **Keys** — EC P-256 CA→leaf chain generated with `openssl` + `node:crypto`
 - **Trust** — DeDi-anchored verdict (signer key compared to the [DeDi.global](https://dedi.global) record); see [TRUST_MODEL.md](./TRUST_MODEL.md)
 - **Storage** — SQLite (`node:sqlite`) for verify-hash records (durable, with retention)
