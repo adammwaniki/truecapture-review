@@ -809,6 +809,22 @@ document.getElementById('btn-flip').addEventListener('click', async () => {
   stopStream(); await openCamera();
 });
 
+// Save with an extension that matches the SIGNED bytes the backend returns — a
+// WebM upload is transcoded to MP4 server-side, so it must save as .mp4, not .webm.
+const EXT_BY_MIME = {
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/tiff': 'tif', 'image/gif': 'gif',
+  'image/avif': 'avif', 'image/heic': 'heic', 'image/heif': 'heif', 'image/svg+xml': 'svg',
+  'video/mp4': 'mp4', 'video/quicktime': 'mov', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/mp4': 'm4a',
+  'video/x-msvideo': 'avi', 'application/pdf': 'pdf',
+};
+function signedFilename(originalName, contentType) {
+  const mime = (contentType || '').split(';')[0].trim().toLowerCase();
+  const ext = EXT_BY_MIME[mime];
+  if (!ext) return `signed_${originalName || 'file'}`; // unknown type → keep original name
+  const base = (originalName || 'file').replace(/\.[^.]+$/, '');
+  return `signed_${base}.${ext}`;
+}
+
 // ── Sign ──────────────────────────────────────────────────────────
 async function processFile(file, metadata) {
   if (captchaConfig && !captchaToken) {
@@ -843,7 +859,7 @@ async function processFile(file, metadata) {
     const blob = await res.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `signed_${file.name}`;
+    a.download = signedFilename(file.name, res.headers.get('Content-Type'));
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 

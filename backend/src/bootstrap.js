@@ -12,6 +12,8 @@ import { createRateLimiter } from './ratelimit.js';
 import { systemClock } from './clock.js';
 import { resolveConfig } from './config.js';
 import { scheduleRetention } from './retention.js';
+import { createTranscoder } from './media/transcode.js';
+import ffmpegStatic from 'ffmpeg-static';
 import { createApp } from './app.js';
 
 // Composition root — intentionally the SINGLE coverage exclusion (see
@@ -66,6 +68,9 @@ export async function start(env = process.env) {
     oidc,
     captcha,
     captchaConfig: cfg.captcha.config,
+    // WebM (Chrome MediaRecorder) → signable MP4 before signing. FFMPEG_PATH
+    // overrides the bundled ffmpeg-static binary.
+    transcode: createTranscoder({ ffmpegPath: cfg.ffmpegPath || ffmpegStatic }),
     limiter: createRateLimiter({ max: cfg.rateLimitMax, windowMs: 60_000 }),
     corsOrigin: cfg.corsOrigin,
     allowedOrigins: cfg.allowedOrigins,

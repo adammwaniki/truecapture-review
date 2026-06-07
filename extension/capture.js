@@ -154,6 +154,22 @@ function stopRecording() {
   showProcessing();
 }
 
+// Save with an extension that matches the SIGNED bytes the backend returns — a
+// WebM recording is transcoded to MP4 server-side, so it must save as .mp4.
+const EXT_BY_MIME = {
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/tiff': 'tif', 'image/gif': 'gif',
+  'image/avif': 'avif', 'image/heic': 'heic', 'image/heif': 'heif', 'image/svg+xml': 'svg',
+  'video/mp4': 'mp4', 'video/quicktime': 'mov', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/mp4': 'm4a',
+  'video/x-msvideo': 'avi', 'application/pdf': 'pdf',
+};
+function signedFilename(originalName, contentType) {
+  const mime = (contentType || '').split(';')[0].trim().toLowerCase();
+  const ext = EXT_BY_MIME[mime];
+  if (!ext) return `signed_${originalName || 'file'}`; // unknown type → keep original name
+  const base = (originalName || 'file').replace(/\.[^.]+$/, '');
+  return `signed_${base}.${ext}`;
+}
+
 // ── Sign & Download ───────────────────────────────────────────────
 async function signAndDownload(blob, filename, mimeType, source) {
   if (captchaConfig && !captchaToken) {
@@ -192,7 +208,7 @@ async function signAndDownload(blob, filename, mimeType, source) {
 
     const signedBlob = await response.blob();
     const objUrl = URL.createObjectURL(signedBlob);
-    await chrome.downloads.download({ url: objUrl, filename: `signed_${filename}`, saveAs: false });
+    await chrome.downloads.download({ url: objUrl, filename: signedFilename(filename, response.headers.get('Content-Type')), saveAs: false });
 
     document.getElementById('verify-url').textContent = verifyUrl;
     showResult();

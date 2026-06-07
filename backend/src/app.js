@@ -5,6 +5,7 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { createHash } from 'node:crypto';
 import { verifyAsset } from './verify/pipeline.js';
+import { toMp4Filename } from './media/transcode.js';
 
 const DEVICE_CLASSES = new Set(['iOS', 'Android', 'Desktop', 'unknown']);
 const deviceClassFrom = (headers) => (DEVICE_CLASSES.has(headers['x-device-class']) ? headers['x-device-class'] : 'unknown');
@@ -27,6 +28,10 @@ export function createApp({
   oidc,
   captcha = { verify: async () => true },
   captchaConfig = null,
+  // Converts unsigned-but-convertible containers (e.g. Chrome's WebM) to a
+  // signable MP4 before signing. Default: nothing is transcodable (sign as-is);
+  // `toMp4` is only consulted when `isTranscodable` returns true.
+  transcode = { isTranscodable: () => false },
   corsOrigin = false,
   allowedOrigins = null,
   limiter = { check: () => true },
@@ -57,6 +62,25 @@ export function createApp({
   app.addHook('onRequest', async (req, reply) => {
     if (!limiter.check(req.ip)) return reply.code(429).send({ error: 'Too Many Requests' });
   });
+
+  // Buffer the uploaded file and, when it's an unsigned-but-convertible container
+  // (e.g. Chrome's WebM), transcode it to a signable MP4. Returns the bytes +
+  // adjusted mimetype/filename, or null after replying 422 if conversion fails.
+  async function prepareUpload(data, reply) {
+    let asset = await data.toBuffer();
+    let { mimetype, filename } = data;
+    if (transcode.isTranscodable(mimetype)) {
+      try {
+        asset = await transcode.toMp4(asset);
+      } catch {
+        reply.code(422).send({ error: 'Could not process the uploaded video' });
+        return null;
+      }
+      mimetype = 'video/mp4';
+      filename = toMp4Filename(filename);
+    }
+    return { asset, mimetype, filename };
+  }
 
   async function signAndStore(asset, mimeType, filename, extraAssertions, deviceClass) {
     const when = clock.now().toISOString();
@@ -125,9 +149,11 @@ export function createApp({
       }
       const data = await req.file();
       if (!data) return reply.code(400).send({ error: 'No file provided' });
-      const asset = await data.toBuffer();
-      const { signed, verifyHash } = await signAndStore(asset, data.mimetype, data.filename, [], deviceClassFrom(req.headers));
-      return sendSigned(reply, data.mimetype, signed, verifyHash);
+      const prepared = await prepareUpload(data, reply);
+      if (!prepared) return reply; // 422 already sent (transcode failed)
+      const { asset, mimetype, filename } = prepared;
+      const { signed, verifyHash } = await signAndStore(asset, mimetype, filename, [], deviceClassFrom(req.headers));
+      return sendSigned(reply, mimetype, signed, verifyHash);
     });
 
     // OIDC-bound sign (C3b): authenticate a user session and bind the verified user.
@@ -146,11 +172,13 @@ export function createApp({
 
       const data = await req.file();
       if (!data) return reply.code(400).send({ error: 'No file provided' });
-      const asset = await data.toBuffer();
+      const prepared = await prepareUpload(data, reply);
+      if (!prepared) return reply; // 422 already sent (transcode failed)
+      const { asset, mimetype, filename } = prepared;
       // L-4: only bind the email when the IdP marked it verified.
       const userAssertion = { label: 'org.truecapture.signer', data: { iss: claims.iss, sub: claims.sub, email: claims.email_verified ? (claims.email ?? null) : null } };
-      const { signed, verifyHash } = await signAndStore(asset, data.mimetype, data.filename, [userAssertion], deviceClassFrom(req.headers));
-      return sendSigned(reply, data.mimetype, signed, verifyHash);
+      const { signed, verifyHash } = await signAndStore(asset, mimetype, filename, [userAssertion], deviceClassFrom(req.headers));
+      return sendSigned(reply, mimetype, signed, verifyHash);
     });
 
     // Verify uploaded bytes (public). Real verdict from the shared pipeline (C1).

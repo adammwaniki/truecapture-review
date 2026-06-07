@@ -75,6 +75,32 @@ TrueCapture implements the [C2PA specification](https://c2pa.org) — the same p
 
 ---
 
+## Supported media formats
+
+Signing **embeds** the manifest *inside* the file plus a content hash (the C2PA "hard binding"), so the engine can only sign formats for which the C2PA spec defines an embedding **and** the engine ships a handler. TrueCapture's engine is [`@contentauth/c2pa-node`](https://github.com/contentauth/c2pa-node) (the official C2PA reference engine, Rust `c2pa-rs`); the list below is **what that engine accepts**:
+
+| Kind | Formats |
+|------|---------|
+| **Images** | JPEG ✓, PNG ✓, WebP ✓, TIFF ✓, GIF ✓, AVIF ✓, SVG ✓, HEIC/HEIF |
+| **Video** | **MP4** ✓ and **MOV** ✓ (the ISO BMFF family — incl. HEVC/AVC) |
+| **Audio** | MP3, WAV, M4A |
+| **Other** | AVI, PDF |
+
+✓ = verified here by signing a real sample and reading it back as `Valid`; the rest are the engine's native handlers (advertised by the addon binary, not sample-checked).
+
+**Why this list?** Each container needs three things defined and implemented: a standardized slot for the manifest (e.g. JPEG `APP11`, PNG `caBX` chunk, the BMFF `uuid` box), a writer that inserts it without corrupting the stream, and a hashing scheme for the hard binding. The C2PA spec defines these only for the formats above.
+
+### WebM is converted automatically
+
+**WebM** (Matroska/VP8|VP9) — what Chrome's `MediaRecorder` produces, so it's the default for the desktop/Android sign page and the Chrome extension — is **not** a C2PA-signable container (`c2pa-rs` has no Matroska handler; it returns `type is unsupported`). To avoid that gap, the backend **transcodes WebM → H.264/AAC MP4 with `ffmpeg` and then signs the MP4**. This is transparent: upload WebM to `POST /sign` and you get back a signed `.mp4`.
+
+- `ffmpeg` ships with the backend via [`ffmpeg-static`](https://www.npmjs.com/package/ffmpeg-static) — no system install needed. Override the binary with `FFMPEG_PATH` (e.g. to use a system `ffmpeg`).
+- The response `Content-Type` reflects the **signed** format (`video/mp4`), and the signed asset is returned in that format with its verify hash in `X-Verify-Hash`.
+- The clients (sign page + extension) name the saved file from that response `Content-Type`, so a WebM recording downloads as **`signed_<name>.mp4`** — the extension always matches the actual bytes.
+- If conversion fails (corrupt upload, missing `ffmpeg`), `POST /sign` returns **422** instead of signing garbage.
+
+---
+
 ## API
 
 All endpoints are served by the **backend** (Fastify) at its base URL — `http://localhost:3000` in local dev, `https://api.yourdomain.com` (your configured domain) in production — **not** the static verify site (`:8080` locally). The interactive docs and the spec are available in **every** environment the backend runs:
@@ -147,6 +173,7 @@ Everything runs on your machine. You can drive just the **API with `curl`**, or 
 
 - **Node.js 22.5+** — the backend uses the built-in `node:sqlite`.
 - **OpenSSL on your `PATH`** — the backend generates its EC P-256 signing chain with it on first run (`backend/src/keys/chain.js`). Pre-installed on most macOS/Linux systems (`openssl version` to check).
+- **`ffmpeg` is bundled** (via `ffmpeg-static`) for WebM→MP4 conversion — no install needed; set `FFMPEG_PATH` to use a system one.
 - DeDi is **optional** locally — see [Getting an `authentic` verdict](#getting-an-authentic-verdict-locally) below.
 
 ### 1. Start the backend
@@ -255,6 +282,7 @@ Set these on the backend service (full template in [`.env.example`](.env.example
 | `RATE_LIMIT_MAX` | Max `/sign`+`/verify` requests per IP per minute (default `120`). |
 | `RETENTION_MS` | Prune stored verify records older than this (unset = kept forever; pruned records' share links stop resolving). |
 | `MAX_FILE_SIZE` | Max upload size in bytes (default 50 MB). |
+| `FFMPEG_PATH` | Override the bundled `ffmpeg-static` binary used to transcode WebM→MP4 before signing (e.g. a system `ffmpeg`). Unset = use the bundled binary. |
 | `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URI` | Optional — enables `POST /sign/session` for authenticated-user signing (mobile wallets etc.). |
 | `PORT`, `HOST` | Listen address (default `3000` / `0.0.0.0`). |
 
