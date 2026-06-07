@@ -381,26 +381,6 @@ main {
   color: var(--accent);
 }
 
-/* Explicit "Confirm signer with DeDi" — the only action that uploads the file. */
-.confirm-signer {
-  display: block;
-  width: 100%;
-  padding: 14px;
-  background: #6366f1;
-  border: none;
-  border-radius: 12px;
-  color: #fff;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  margin-bottom: 16px;
-  transition: all 0.15s;
-}
-
-.confirm-signer:hover {
-  background: #4f46e5;
-}
-
 footer {
   border-top: 1px solid var(--border);
   padding: 24px 0;

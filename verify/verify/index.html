@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TrueCapture — Verify Media</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="/verify/styles.css">
   <style>
     /* Mobile: hide the full upload experience, show the guidance message instead.
        Using !important so CSS wins over any inline style JS may set later. */
@@ -70,7 +70,7 @@
             </svg>
           </div>
           <h2>Verify a signed file</h2>
-          <p>Select a signed image or video — it's read in your browser and never uploaded</p>
+          <p>Select a signed image or video to check its signature and signer</p>
           <input type="file" id="file-input" accept="image/*,video/*"
                  aria-label="Choose a signed image or video to verify"
                  onchange="handleFile(this.files[0])"
@@ -95,21 +95,33 @@
 
       <!-- Result -->
       <div id="result-section" class="hidden">
-        <!-- Verdict banner -->
+        <!-- Headline banner -->
         <div class="verdict" id="verdict-banner" role="status" aria-live="polite">
           <div class="verdict-icon" id="verdict-icon"></div>
           <div class="verdict-text">
             <h2 id="verdict-title"></h2>
-            <p id="verdict-desc"></p>
+            <p id="verdict-subtitle" style="display:none"></p>
           </div>
         </div>
 
-        <!-- Explicit, user-initiated server check (uploads the file) for the
-             forgery-proof signer-vs-DeDi verdict. Hidden until the in-browser
-             read finds a signed, intact file. -->
-        <button class="confirm-signer" id="btn-confirm-signer" style="display:none">Confirm signer with DeDi</button>
+        <!-- Separate warning block — shown (with its own colour) when the signature
+             passes but the signer can't be trusted (e.g. not registered on DeDi). -->
+        <div class="warning-block" id="warning-block" role="status" aria-live="polite" style="display:none">
+          <div class="warning-icon" id="warning-icon"></div>
+          <div class="warning-text">
+            <strong class="warning-title" id="warning-title"></strong>
+            <p class="warning-detail" id="warning-detail"></p>
+          </div>
+        </div>
 
-        <!-- DeDi key registry (populated by the server verdict) -->
+        <!-- The two explicit checks: signature + signer. -->
+        <div class="manifest-details" id="verify-details">
+          <h3>Checks</h3>
+          <div class="check-row"><span class="check-label">Signature</span><span class="check-value" id="sig-status"></span></div>
+          <div class="check-row" id="signer-row"><span class="check-label">Signer</span><span class="check-value" id="signer-status"></span></div>
+        </div>
+
+        <!-- DeDi key registry (populated when the signer record carries an org) -->
         <div class="manifest-details" id="dedi-section" style="display:none"></div>
 
         <button class="verify-another" id="btn-verify-another">Verify Another File</button>
@@ -117,11 +129,12 @@
     </main>
 
     <footer>
-      <p>Your file is read <strong>in your browser</strong> to check it is intact and signed — it is <strong>not uploaded</strong>. Confirming the signer against the <a href="https://dedi.global" target="_blank" rel="noopener">DeDi.global</a> registry is an optional step that sends the file to TrueCapture for that check. Built on the <a href="https://c2pa.org" target="_blank" rel="noopener">C2PA</a> content-provenance standard.</p>
+      <p>To verify, your file is sent to TrueCapture, which checks its <a href="https://c2pa.org" target="_blank" rel="noopener">C2PA</a> signature and confirms the signer against the <a href="https://dedi.global" target="_blank" rel="noopener">DeDi.global</a> public registry — in one step. We keep only the verify hash, never the file. (Apps that sign on-device — the mobile SDK and Chrome extension — never upload your media.)</p>
       <p style="margin-top:8px"><a href="https://www.truecapture.global">Learn more about TrueCapture →</a></p>
     </footer>
   </div>
 
-  <script type="module" src="verify.js"></script>
+  <script src="/config.js"></script>
+  <script type="module" src="/verify/verify.js"></script>
 </body>
 </html>

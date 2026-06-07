@@ -38,6 +38,8 @@ describe('resolveConfig', () => {
     expect(c.corsOrigin).toEqual(['https://a']);
     expect(resolveConfig({ VERIFY_BASE_URL: 'https://v/verify' }).verifyBaseUrl).toBe('https://v/verify');
     expect(c.verifyBaseUrl).toBeNull(); // not set in this env
+    expect(resolveConfig({ FFMPEG_PATH: '/usr/bin/ffmpeg' }).ffmpegPath).toBe('/usr/bin/ffmpeg');
+    expect(c.ffmpegPath).toBeNull(); // not set → bootstrap uses the bundled ffmpeg-static
     expect(c.maxFileSize).toBe(1000);
     expect(c.rateLimitMax).toBe(5);
     expect(c.port).toBe(8080);

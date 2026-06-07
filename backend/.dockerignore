@@ -1,0 +1,14 @@
+node_modules
+.keys
+*.db
+.env
+.env.local
+coverage
+test-results
+playwright-report
+e2e
+**/*.test.js
+npm-debug.log*
+.DS_Store
+Dockerfile
+.dockerignore

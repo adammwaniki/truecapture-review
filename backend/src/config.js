@@ -74,6 +74,9 @@ export function resolveConfig(env) {
     allowedOrigins,
     corsOrigin,
     verifyBaseUrl: env.VERIFY_BASE_URL || null,
+    // Override the bundled ffmpeg-static binary used to transcode WebM → MP4 before
+    // signing (e.g. to a system ffmpeg). null = use the bundled binary (bootstrap).
+    ffmpegPath: env.FFMPEG_PATH || null,
     maxFileSize: Number(env.MAX_FILE_SIZE || DEFAULT_MAX_FILE_SIZE),
     rateLimitMax: Number(env.RATE_LIMIT_MAX || 120),
     // H-3: prune stored records older than this (ms). null = retention disabled.

@@ -1,7 +1,7 @@
-// Test double for the `c2pa` seam (production impl: @contentauth/c2pa-node with
-// a c2patool fallback — see truecap-spike-c2pa-dedi.md). Contract:
+// Test double for the `c2pa` seam (production impl: @contentauth/c2pa-node — see
+// docs/review/truecap-spike-c2pa-dedi.md). Contract:
 //   sign(asset: Buffer, mimeType, manifest) -> Promise<Buffer>   (signed asset)
-//   read(asset: Buffer, mimeType) -> Promise<{ validationState, signerKey, manifest } | null>
+//   read(asset: Buffer, mimeType) -> Promise<{ validationState, validationStatus, manifest } | null>
 // Pass signImpl/readImpl to simulate every success and failure mode (C4/C1 tests).
 export function fakeC2pa({ signImpl, readImpl } = {}) {
   return {

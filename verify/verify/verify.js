@@ -1,21 +1,18 @@
-// Verify page glue. The logic lives in the tested ../lib modules; this module
-// only wires them to the DOM.
-//
-// H2 — privacy-maximal public verify:
-//   • Default (file drop / picker): the file is read IN YOUR BROWSER via the
-//     vendored c2pa-web (./c2pa-read.js). Nothing is uploaded. We can prove the
-//     content is intact and signed, but NOT that the signer is genuine (the key
-//     is not exposed to the browser).
-//   • "Confirm signer with DeDi": an explicit action that uploads the file to
-//     the backend for the forgery-proof key-vs-DeDi check (C1) and the real
-//     verdict (authentic / forged / untrusted).
-//   • Share-link (/verify/<hash> or ?hash=): the file was signed server-side, so
-//     the server already holds it — that path verifies on the server directly.
+// Verify page glue. The tested logic lives in ../lib; this only wires it to the
+// DOM. ONE combined check: dropping/selecting a file (or opening a share link)
+// sends it to the backend, which runs BOTH the C2PA signature check and the DeDi
+// signer check in one pass and returns two axes. We render a plain-language
+// headline plus the two explicit lines (Signature / Signer).
 import { verifyByUpload, verifyByHash } from '../lib/verify-client.js';
-import { toDisplayModel, toBrowserModel } from '../lib/render-model.js';
+import { toCombinedModel } from '../lib/render-model.js';
+import { resolveBackendUrl } from '../lib/backend-url.js';
 import { readInBrowser } from './c2pa-read.js';
 
-const BACKEND_URL = window.TRUECAPTURE_BACKEND || 'https://api.truecapture.global';
+// Backend base URL. Served from localhost OR a private LAN IP (e.g. a phone at
+// 192.168.x.x:8080) → the same host's backend on :3000, so verifying works without
+// editing config.js. A public domain → the production API. Override any time with
+// window.TRUECAPTURE_BACKEND (config.js). See ../lib/backend-url.js.
+const BACKEND_URL = resolveBackendUrl(location, window.TRUECAPTURE_BACKEND);
 const doFetch = (url, opts) => fetch(url, opts);
 
 const ICONS = {
@@ -25,21 +22,7 @@ const ICONS = {
   info: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
 };
 
-const DESCRIPTIONS = {
-  authentic: 'The content is unchanged since signing, and the signing key is registered to the organisation below on DeDi.global.',
-  tampered: 'This file carries a signature, but its content has changed since it was signed.',
-  invalid: 'This file carries a signature that could not be validated — it may be corrupted or was not produced as claimed.',
-  forged: "This file's signature does not match the key registered to the claimed organisation on DeDi.global.",
-  untrusted: "The signer's key is not currently live on DeDi.global (unregistered or revoked).",
-  unsigned: 'This file does not contain a TrueCapture / C2PA signature.',
-  unknown: "We couldn't determine this file's status.",
-  signed: 'Read in your browser — your file was not uploaded. Confirm the signer to check it against the DeDi.global registry.',
-};
-
 const $ = (id) => document.getElementById(id);
-
-// The file awaiting an explicit server confirm (set by the in-browser read).
-let pendingFile = null;
 
 function showSection(id) {
   ['drop-section', 'verifying-section', 'result-section'].forEach((s) => {
@@ -54,25 +37,57 @@ function updateStatus(msg) {
   if (el) el.textContent = msg;
 }
 
-function paintBanner(verdict, icon, title) {
+function escapeText(value) {
+  const div = document.createElement('div');
+  div.textContent = String(value);
+  return div.innerHTML;
+}
+
+// Render the combined result: headline banner (+ optional subtitle), an optional
+// separate warning block (e.g. valid signature but signer not on DeDi), the two
+// explicit colour-coded lines, and the entity.
+function renderResult(result) {
+  const m = toCombinedModel(result);
   showSection('result-section');
-  $('verdict-banner').className = 'verdict ' + verdict;
-  $('verdict-icon').innerHTML = ICONS[icon] || ICONS.info;
-  $('verdict-title').textContent = title;
-  $('verdict-desc').textContent = DESCRIPTIONS[verdict] || DESCRIPTIONS.unknown;
-}
+  $('verdict-banner').className = 'verdict ' + m.verdict;
+  $('verdict-icon').innerHTML = ICONS[m.icon] || ICONS.info;
+  $('verdict-title').textContent = m.headline;
 
-function setConfirmVisible(visible) {
-  const btn = $('btn-confirm-signer');
-  if (btn) btn.style.display = visible ? '' : 'none';
-}
+  const subtitle = $('verdict-subtitle');
+  if (subtitle) {
+    subtitle.textContent = m.subtitle || '';
+    subtitle.style.display = m.subtitle ? '' : 'none';
+  }
 
-// Server verdict (forgery-proof): the authoritative result + DeDi entity.
-function render(result) {
-  const m = toDisplayModel(result);
-  paintBanner(m.verdict, m.icon, m.title);
-  pendingFile = null;
-  setConfirmVisible(false);
+  // Separate warning block — its own colour (orange = caution, red = bad).
+  const warn = $('warning-block');
+  if (warn) {
+    if (m.warning) {
+      warn.className = 'warning-block ' + m.warning.tone;
+      $('warning-icon').innerHTML = ICONS[m.warning.icon] || ICONS.warn;
+      $('warning-title').textContent = m.warning.title;
+      $('warning-detail').textContent = m.warning.detail || '';
+      warn.style.display = '';
+    } else {
+      warn.style.display = 'none';
+    }
+  }
+
+  const details = $('verify-details');
+  if (m.showChecks && m.signatureLabel) {
+    details.style.display = '';
+    $('sig-status').textContent = m.signatureLabel;
+    $('sig-status').className = 'check-value ' + m.signatureTone;
+    if (m.signerLabel) {
+      $('signer-status').textContent = m.signerLabel;
+      $('signer-status').className = 'check-value ' + m.signerTone;
+      $('signer-row').style.display = '';
+    } else {
+      $('signer-row').style.display = 'none';
+    }
+  } else {
+    details.style.display = 'none';
+  }
 
   const dedi = $('dedi-section');
   if (m.entityName) {
@@ -87,49 +102,28 @@ function render(result) {
   }
 }
 
-// In-browser read (no upload): content integrity + signed/not. Offers the
-// explicit DeDi confirm when there is something to confirm.
-function renderBrowser(read, file) {
-  const m = toBrowserModel(read);
-  paintBanner(m.verdict, m.icon, m.title);
-  $('dedi-section').style.display = 'none';
-  if (m.canConfirm) {
-    pendingFile = file;
-    setConfirmVisible(true);
-  } else {
-    pendingFile = null;
-    setConfirmVisible(false);
-  }
-}
-
-function escapeText(value) {
-  const div = document.createElement('div');
-  div.textContent = String(value);
-  return div.innerHTML;
-}
-
-async function readLocally(file) {
+// Combined check. A fast IN-BROWSER read shows the signature/content result
+// immediately (no upload); in parallel the file is uploaded so the server can
+// run the authoritative check including the DeDi key binding (which the browser
+// can't do). The server result is final and wins any race with the preview.
+async function verifyFile(file) {
   showSection('verifying-section');
-  updateStatus('Reading in your browser…');
-  try {
-    renderBrowser(await readInBrowser(file), file);
-  } catch {
-    // Could not load/run the in-browser reader. Do NOT silently upload — show an
-    // error state that lets the user opt into the server check explicitly.
-    renderBrowser({ error: true }, file);
-  }
-}
+  updateStatus('Checking the signature and DeDi registry…');
+  let serverDone = false;
 
-// Explicit, user-initiated upload for the forgery-proof signer check.
-async function confirmSigner() {
-  if (!pendingFile) return;
-  const file = pendingFile;
-  showSection('verifying-section');
-  updateStatus('Confirming signer with DeDi…');
+  // Instant, no-upload preview of the signature axis (best-effort).
+  readInBrowser(file)
+    .then((read) => { if (!serverDone) renderResult({ signature: read.signature, signer: 'pending' }); })
+    .catch(() => {}); // reader unavailable → just wait for the server
+
   try {
-    render(await verifyByUpload(doFetch, BACKEND_URL, file));
-  } catch {
-    render({ verdict: 'unknown' });
+    const result = await verifyByUpload(doFetch, BACKEND_URL, file);
+    serverDone = true;
+    renderResult(result);
+  } catch (err) {
+    serverDone = true;
+    console.error(`[verify] could not reach ${BACKEND_URL}/verify:`, err);
+    renderResult({ verdict: 'unknown' });
   }
 }
 
@@ -138,14 +132,7 @@ window.handleFile = function handleFile(file) {
   if (!file || window._handling) return;
   window._handling = true;
   setTimeout(() => { window._handling = false; }, 3000);
-  const heic = /image\/(heic|heif)/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
-  if (heic) {
-    paintBanner('unknown', 'info', 'Unsupported Format');
-    $('verdict-desc').textContent = 'HEIC photos cannot be verified in the browser — export as JPEG and try again.';
-    setConfirmVisible(false);
-    return;
-  }
-  setTimeout(() => readLocally(file), 0);
+  setTimeout(() => verifyFile(file), 0);
 };
 
 window.startPolling = function startPolling(input) {
@@ -177,33 +164,28 @@ function init() {
     });
   }
 
-  const confirm = $('btn-confirm-signer');
-  if (confirm) confirm.addEventListener('click', confirmSigner);
-
   const another = $('btn-verify-another');
   if (another) {
     another.addEventListener('click', () => {
       window._handling = false;
-      pendingFile = null;
       showSection('drop-section');
       const fi = $('file-input');
       if (fi) fi.value = '';
     });
   }
 
-  // Share-link flow: truecapture.global/verify/<hash> or ?hash=<hash>. The file
-  // was signed server-side, so the server verifies it directly (no user upload).
-  // Contract: the backend emits a 24-char lowercase-hex verify hash
-  // (sha256(signed).slice(0,24) — see backend src/app.js signAndStore). This
-  // accepts 16–32 lowercase hex; keep it in sync if that format ever changes.
+  // Share-link flow: truecapture.global/verify/<hash> or ?hash=<hash> — looked up
+  // by hash, no user upload. Contract: the backend emits a 24-char lowercase-hex
+  // verify hash (sha256(signed).slice(0,24) — see backend src/app.js). This accepts
+  // 16–32 lowercase hex; keep it in sync if that format ever changes.
   const HASH_RE = /^[0-9a-f]{16,32}$/;
   const pathTail = location.pathname.split('/').pop() || '';
   const queryHash = new URLSearchParams(location.search).get('hash') || '';
   const urlHash = (HASH_RE.test(pathTail) ? pathTail : queryHash).trim();
   if (HASH_RE.test(urlHash)) {
     showSection('verifying-section');
-    updateStatus('Looking up signed file…');
-    verifyByHash(doFetch, BACKEND_URL, urlHash).then(render).catch(() => render({ verdict: 'unknown' }));
+    updateStatus('Looking up the signed file…');
+    verifyByHash(doFetch, BACKEND_URL, urlHash).then(renderResult).catch(() => renderResult({ verdict: 'unknown' }));
   }
 }
 

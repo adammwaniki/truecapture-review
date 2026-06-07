@@ -12,6 +12,8 @@ import { createRateLimiter } from './ratelimit.js';
 import { systemClock } from './clock.js';
 import { resolveConfig } from './config.js';
 import { scheduleRetention } from './retention.js';
+import { createTranscoder } from './media/transcode.js';
+import ffmpegStatic from 'ffmpeg-static';
 import { createApp } from './app.js';
 
 // Composition root — intentionally the SINGLE coverage exclusion (see
@@ -54,7 +56,9 @@ export async function start(env = process.env) {
     ? createOidcVerifier({ issuer: cfg.oidc.issuer, audience: cfg.oidc.audience, jwks: createRemoteJWKSet(new URL(cfg.oidc.jwksUri)) })
     : { verify: async () => null }; // not configured → /sign/session returns 401
 
-  const store = createSqliteStore(join(keysDir, '..', 'records.db'));
+  // Keep the share-link store alongside the signing chain so a single persisted
+  // directory (.keys — a Docker volume in containerised deploys) survives both.
+  const store = createSqliteStore(join(keysDir, 'records.db'));
   scheduleRetention({ store, retentionMs: cfg.retentionMs }); // H-3 (no-op when disabled)
 
   const app = createApp({
@@ -66,6 +70,9 @@ export async function start(env = process.env) {
     oidc,
     captcha,
     captchaConfig: cfg.captcha.config,
+    // WebM (Chrome MediaRecorder) → signable MP4 before signing. FFMPEG_PATH
+    // overrides the bundled ffmpeg-static binary.
+    transcode: createTranscoder({ ffmpegPath: cfg.ffmpegPath || ffmpegStatic }),
     limiter: createRateLimiter({ max: cfg.rateLimitMax, windowMs: 60_000 }),
     corsOrigin: cfg.corsOrigin,
     allowedOrigins: cfg.allowedOrigins,

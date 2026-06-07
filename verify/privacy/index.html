@@ -121,7 +121,7 @@
 
       <div class="privacy-section">
         <h2>How verifying works</h2>
-        <p>On a desktop browser, a file you check is read <strong>in your browser</strong> to confirm it is intact and signed — it is not uploaded. Confirming that the signer is the organisation registered on <a href="https://dedi.global" target="_blank" rel="noopener">DeDi.global</a> is an optional step that sends the file to our server for that check only. Shared verify links are looked up by hash and never carry your file.</p>
+        <p>When you verify a file on the web, it is sent to our server, which checks its C2PA signature and confirms the signer against the <a href="https://dedi.global" target="_blank" rel="noopener">DeDi.global</a> registry in one step. We keep only the file's verify hash — never the file itself. Shared verify links are looked up by that hash and never carry a file. (Apps that sign on-device — the mobile SDK and Chrome extension — never upload your media.)</p>
       </div>
 
       <div class="privacy-section">

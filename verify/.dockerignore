@@ -1,0 +1,8 @@
+node_modules
+**/*.test.js
+package.json
+package-lock.json
+.env
+.env.local
+coverage
+.DS_Store

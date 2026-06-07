@@ -201,6 +201,14 @@ main {
   border-color: var(--border, #e2e8f0);
 }
 
+/* In-browser preview while the server confirms the signer. */
+.verdict.checking {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: var(--accent);
+}
+.verdict.checking .verdict-icon { background: rgba(99, 102, 241, 0.15); color: var(--accent); }
+.verdict.checking .verdict-text h2 { color: var(--accent); }
+
 .verdict-icon {
   width: 56px;
   height: 56px;
@@ -409,6 +417,63 @@ main {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* Separate warning block: the signature passed, but the signer can't be trusted
+   (e.g. not registered / revoked on DeDi). Its own colour, distinct from the
+   green signature banner above it. */
+.warning-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 18px 20px;
+  border-radius: var(--radius);
+  margin-bottom: 24px;
+  border: 1px solid;
+}
+.warning-block.warn { background: rgba(245, 158, 11, 0.08); border-color: var(--warning); }
+.warning-block.bad { background: rgba(239, 68, 68, 0.08); border-color: var(--error); }
+.warning-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.warning-block.warn .warning-icon { color: var(--warning); }
+.warning-block.bad .warning-icon { color: var(--error); }
+.warning-title { display: block; font-size: 16px; font-weight: 600; margin-bottom: 2px; }
+.warning-block.warn .warning-title { color: var(--warning); }
+.warning-block.bad .warning-title { color: var(--error); }
+.warning-detail { color: var(--muted); font-size: 14px; }
+
+/* The two explicit checks (Signature / Signer) inside the result card. */
+.check-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.check-row:first-of-type { border-top: none; padding-top: 0; }
+.check-label {
+  flex-shrink: 0;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.check-value {
+  text-align: right;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.check-value.good { color: var(--success); }
+.check-value.warn { color: var(--warning); }
+.check-value.bad { color: var(--error); }
+.check-value.neutral { color: var(--text); }
 
 footer {
   border-top: 1px solid var(--border);

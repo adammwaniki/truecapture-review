@@ -5,12 +5,29 @@ const ok = (body, headers = {}) => ({ ok: true, status: 200, json: async () => b
 const notOk = (status) => ({ ok: false, status, json: async () => ({}), blob: async () => null, headers: { get: () => null } });
 
 describe('verify-client', () => {
-  it('verifyByUpload POSTs the file and returns the verdict JSON', async () => {
+  it('verifyByUpload POSTs the file (with an abort signal) and returns the verdict JSON', async () => {
     let captured;
     const fetchImpl = async (url, opts) => { captured = { url, opts }; return ok({ verdict: 'authentic' }); };
     expect(await verifyByUpload(fetchImpl, 'http://api', new Blob(['x']))).toEqual({ verdict: 'authentic' });
     expect(captured.url).toBe('http://api/verify');
     expect(captured.opts.method).toBe('POST');
+    expect(captured.opts.signal).toBeInstanceOf(AbortSignal); // timeout wired
+  });
+
+  it('verifyByUpload rejects (does not hang) when the backend never responds past the timeout', async () => {
+    // Mimics an unreachable/hung backend (wrong host, CORS-blocked, or down): the
+    // fetch honours the abort signal and rejects, so the UI never gets stuck.
+    const hanging = (url, opts) => new Promise((_, reject) => {
+      opts.signal.addEventListener('abort', () => reject(new Error('aborted')));
+    });
+    await expect(verifyByUpload(hanging, 'http://api', new Blob(['x']), { timeoutMs: 20 })).rejects.toThrow();
+  });
+
+  it('verifyByHash also carries a timeout signal', async () => {
+    const hanging = (url, opts) => new Promise((_, reject) => {
+      opts.signal.addEventListener('abort', () => reject(new Error('aborted')));
+    });
+    await expect(verifyByHash(hanging, 'http://api', 'abc', { timeoutMs: 20 })).rejects.toThrow();
   });
 
   it('verifyByHash returns the verdict on success', async () => {

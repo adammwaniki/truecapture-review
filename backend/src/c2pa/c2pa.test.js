@@ -35,6 +35,23 @@ describe('c2pa engine (contentauth, ES256)', () => {
     expect(await c2pa.read(jpeg, 'image/jpeg')).toBeNull();
   });
 
+  it('still reads a signed asset when the client sends an unhelpful mimetype (sniff fallback)', async () => {
+    // A browser that can't determine file.type uploads as application/octet-stream
+    // (or empty). The reader must sniff the real format and still find the manifest,
+    // so a genuinely-signed file is never misreported as "Not signed".
+    const signed = await c2pa.sign(jpeg, 'image/jpeg', {
+      claim_generator_info: [{ name: 'TrueCapture' }],
+      assertions: [{ label: 'c2pa.actions.v2', data: { actions: [{ action: 'c2pa.created' }] } }],
+    });
+    expect((await c2pa.read(signed, 'application/octet-stream')).validationState).toBe('Valid');
+    expect((await c2pa.read(signed, '')).validationState).toBe('Valid'); // empty mimetype too
+  });
+
+  it('returns null when the bytes match no known format and the mimetype is unhelpful', async () => {
+    const notMedia = Buffer.from('this is plainly not a media file at all', 'utf8');
+    expect(await c2pa.read(notMedia, 'application/octet-stream')).toBeNull();
+  });
+
   it('signs a manifest larger than the legacy 64KB APP11 limit (M2 regression)', async () => {
     const big = 'x'.repeat(100 * 1024); // would overflow the old 16-bit APP11 length field
     const signed = await c2pa.sign(jpeg, 'image/jpeg', {
