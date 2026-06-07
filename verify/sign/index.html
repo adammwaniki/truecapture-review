@@ -629,9 +629,15 @@ footer a { color: #6366f1; text-decoration: none; }
 <script src="/config.js"></script>
 <script>
 // Backend base URL: config.js (window.TRUECAPTURE_BACKEND) wins; otherwise auto-
-// detect — local backend on :3000 when served from localhost, else the API domain.
+// detect — the same host's backend on :3000 when served from localhost OR a
+// private LAN IP / *.local (so a phone at 192.168.x.x:8080 works without editing
+// config.js), else the production API domain. Mirrors verify/lib/backend-url.js.
+const isLocalOrPrivateHost = (h) => !!h && (
+  h === 'localhost' || h === '127.0.0.1' || h === '::1' || h.endsWith('.local')
+  || /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h)
+);
 const BACKEND_URL = window.TRUECAPTURE_BACKEND
-  || ((location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  || (isLocalOrPrivateHost(location.hostname)
     ? `${location.protocol}//${location.hostname}:3000`
     : 'https://api.truecapture.global');
 

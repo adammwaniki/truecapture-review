@@ -198,7 +198,15 @@ The pages need to know your backend's URL, and the backend must allow the verify
 // verify/config.js
 window.TRUECAPTURE_BACKEND = 'http://localhost:3000'; // or your deployed backend
 ```
-Leave it blank to use the auto-detect (localhost in dev, the production API otherwise).
+Leave it blank to use the auto-detect (the same host's `:3000` when served from `localhost` or a private LAN IP; the production API otherwise).
+
+**Testing from another device (e.g. your phone).** Serve and access the site by your machine's LAN IP. The pages auto-target that same host's backend on `:3000` (a page at `http://192.168.1.105:8080` calls `http://192.168.1.105:3000`) — no `config.js` edit needed. Two requirements:
+- the backend already binds `0.0.0.0`, so it's reachable on the LAN; and
+- **`CORS_ORIGINS` must include the LAN page origin** (it's a comma-separated list):
+  ```bash
+  cd backend && CORS_ORIGINS=http://localhost:8080,http://192.168.1.105:8080 node server.js
+  ```
+  Without that, the browser blocks the cross-origin call and the result can't load. (The client also times out after ~30s rather than hanging, so a misconfigured backend fails clearly instead of getting stuck on "confirming signer…".)
 
 > The **sign page on desktop** shows a "use the extension" message (live capture is mobile/extension). On desktop, create signed files via `curl` (step 2) or the extension.
 
